@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  VibeGuardian - AI-powered vibe checking and sentiment analysis using AWS Bedrock
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Environment:
+      Variables:
+        VIBE_TABLE_NAME: !Ref VibeTable
+        BEDROCK_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
+
+Resources:
+  # Lambda function for vibe analysis
+  VibeAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: vibe_agent/
+      Handler: app.lambda_handler
+      Description: Analyzes message vibes using AWS Bedrock and stores results in DynamoDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VibeTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+              - bedrock:InvokeModelWithResponseStream
+            Resource: '*'
+      Events:
+        VibeCheckAPI:
+          Type: Api
+          Properties:
+            Path: /vibe
+            Method: post
+            RestApiId: !Ref VibeApi
+
+  # API Gateway for vibe checking
+  VibeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'POST, GET, OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+        AllowOrigin: "'*'"
+
+  # DynamoDB table for storing vibe history
+  VibeTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: vibeguardian-vibes
+      AttributeDefinitions:
+        - AttributeName: messageId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: messageId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+Outputs:
+  VibeApiEndpoint:
+    Description: API Gateway endpoint URL for vibe checking
+    Value: !Sub "https://${VibeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/vibe"
+  
+  VibeAgentFunctionArn:
+    Description: ARN of the VibeAgent Lambda function
+    Value: !GetAtt VibeAgentFunction.Arn
+  
+  VibeTableName:
+    Description: DynamoDB table name for vibe storage
+    Value: !Ref VibeTable
+

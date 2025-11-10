@@ -1,0 +1,121 @@
+name: Cloud SAM Local Deployment
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  # Build and test SAM application locally in GitHub Actions
+  sam-local:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Verify Docker is running
+        run: |
+          docker --version
+          docker ps
+
+      - name: Build SAM application
+        run: |
+          echo "Building SAM application..."
+          sam build
+        continue-on-error: false
+
+      - name: Run sam local invoke for VibeAgentFunction
+        run: |
+          echo "Testing VibeAgentFunction with sample event..."
+          sam local invoke VibeAgentFunction --event sam/events/sample_message.json | tee invoke-output.log
+        continue-on-error: true
+
+      - name: Start sam local API (background)
+        run: |
+          echo "Starting SAM local API Gateway..."
+          sam local start-api --port 3000 &
+          sleep 10
+        continue-on-error: true
+
+      - name: Test API endpoint with curl
+        run: |
+          echo "Testing local API endpoint..."
+          curl -X POST http://localhost:3000/vibe \
+            -H "Content-Type: application/json" \
+            -d '{"message": "test"}' || echo "API test skipped or failed"
+        continue-on-error: true
+
+      - name: Upload SAM build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sam-build-artifacts
+          path: .aws-sam/build/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload invoke logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sam-invoke-logs
+          path: invoke-output.log
+          retention-days: 7
+          if-no-files-found: warn
+
+  # Deploy to AWS (only on main branch merges)
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: sam-local
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC authentication
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}  # e.g., arn:aws:iam::123456789012:role/SAMDeployRole
+          aws-region: us-west-2
+
+      - name: Build SAM application for deployment
+        run: sam build
+
+      - name: Deploy SAM stack to AWS
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name vibeguardian-stack \
+            --capabilities CAPABILITY_IAM \
+            --region us-west-2 \
+            --resolve-s3
+
+      - name: Get stack outputs
+        run: |
+          echo "Deployment complete. Stack outputs:"
+          aws cloudformation describe-stacks \
+            --stack-name vibeguardian-stack \
+            --region us-west-2 \
+            --query 'Stacks[0].Outputs' \
+            --output table
+

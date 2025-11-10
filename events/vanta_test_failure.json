@@ -1,0 +1,34 @@
+{
+  "version": "0",
+  "id": "vanta-test-001",
+  "detail-type": "Test Failed",
+  "source": "vanta.compliance",
+  "account": "123456789012",
+  "time": "2025-10-10T12:00:00Z",
+  "region": "us-east-1",
+  "detail": {
+    "test_id": "s3_block_public_access",
+    "test_name": "S3 Bucket Block Public Access",
+    "severity": "high",
+    "framework": "SOC2",
+    "control_id": "CC6.1",
+    "resource_type": "AWS::S3::Bucket",
+    "resource_arn": "arn:aws:s3:::self-healing-test-xxxxx",
+    "resource_id": "self-healing-test-xxxxx",
+    "failure_reason": "S3 bucket does not have Block Public Access enabled",
+    "current_state": {
+      "BlockPublicAcls": false,
+      "IgnorePublicAcls": false,
+      "BlockPublicPolicy": false,
+      "RestrictPublicBuckets": false
+    },
+    "required_state": {
+      "BlockPublicAcls": true,
+      "IgnorePublicAcls": true,
+      "BlockPublicPolicy": true,
+      "RestrictPublicBuckets": true
+    },
+    "discovered_at": "2025-10-10T11:45:00Z"
+  }
+}
+
