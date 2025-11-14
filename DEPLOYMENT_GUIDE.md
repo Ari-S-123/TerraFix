@@ -1,340 +1,431 @@
-# Deployment Guide
+# TerraFix Deployment Guide
 
-This guide walks you through deploying the Self-Healing Cloud system step-by-step.
+This guide provides step-by-step instructions for deploying TerraFix in production.
 
-## Prerequisites Checklist
+## Table of Contents
 
-- [ ] AWS Account with administrator access
-- [ ] AWS CLI installed and configured (`aws configure`)
-- [ ] Terraform >= 1.0 installed
-- [ ] Node.js >= 18 installed
-- [ ] Python 3.12 installed
-- [ ] Git installed
+1. [Prerequisites](#prerequisites)
+2. [Local Development Setup](#local-development-setup)
+3. [Docker Deployment](#docker-deployment)
+4. [ECS/Fargate Production Deployment](#ecsfargate-production-deployment)
+5. [Configuration](#configuration)
+6. [Monitoring and Operations](#monitoring-and-operations)
+7. [Troubleshooting](#troubleshooting)
 
-## Step 1: Enable Amazon Bedrock Access
+## Prerequisites
 
-**Time: 5-10 minutes (may require AWS approval)**
+### Required
 
-1. Log into AWS Console
-2. Navigate to **Amazon Bedrock** service (us-east-1 region)
-3. Go to **Model access** in the left sidebar
-4. Click **Request model access**
-5. Find **Anthropic > Claude Sonnet 4.5** and click **Request access**
-6. Wait for approval (usually instant, but can take up to 24 hours)
+- **Python 3.14**: TerraFix requires Python 3.14 (released November 2025)
+- **AWS Account**: With Bedrock access in us-west-2
+- **Vanta Account**: OAuth token with `test:read` scope
+- **GitHub Account**: Personal access token with `repo` scope
+- **Git**: For repository cloning operations
+- **Terraform CLI**: For infrastructure provisioning (optional for local dev)
 
-**Verify access:**
+### Optional
+
+- **Docker**: For containerized deployment
+- **AWS CLI**: For ECS/ECR operations
+
+## Local Development Setup
+
+### 1. Clone Repository
+
 ```bash
-aws bedrock list-foundation-models --region us-east-1 --by-provider anthropic
+git clone https://github.com/your-org/terrafix.git
+cd terrafix
 ```
 
-You should see `anthropic.claude-sonnet-4-5-v2:0` in the list.
-
-## Step 2: Clone and Setup
+### 2. Create Virtual Environment
 
 ```bash
-# Clone repository (or navigate to your project directory)
-cd Self-Healing-Cloud
-
-# Verify project structure
-ls -la
-# Should see: backend/, frontend/, terraform/, events/, docs/
+python3.14 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-## Step 3: Deploy AWS Infrastructure
-
-**Time: 5-10 minutes**
+### 3. Install Dependencies
 
 ```bash
-# Navigate to terraform directory
-cd terraform
+pip install -r requirements.txt
 
-# Initialize Terraform
-terraform init
+# For development
+pip install -r requirements-dev.txt
+```
 
-# Generate unique bucket name
-export BUCKET_SUFFIX=$(uuidgen | cut -c1-8 | tr '[:upper:]' '[:lower:]')
+### 4. Configure Environment
 
-# Create terraform.tfvars
-cat > terraform.tfvars <<EOF
-aws_region       = "us-east-1"
-test_bucket_name = "self-healing-test-${BUCKET_SUFFIX}"
-dry_run          = "true"
-log_level        = "INFO"
+Create `.env` file:
+
+```bash
+# Required
+VANTA_API_TOKEN=vanta_oauth_token_here
+GITHUB_TOKEN=ghp_github_token_here
+AWS_REGION=us-west-2
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+
+# Optional
+BEDROCK_MODEL_ID=anthropic.claude-sonnet-4-5-v2:0
+POLL_INTERVAL_SECONDS=300
+SQLITE_PATH=./terrafix.db
+GITHUB_REPO_MAPPING={"default": "your-org/terraform-repo"}
+TERRAFORM_PATH=terraform
+MAX_CONCURRENT_WORKERS=3
+LOG_LEVEL=INFO
+```
+
+### 5. Run Locally
+
+```bash
+# Run service
+python -m terrafix.service
+
+# Or process single failure for testing
+python -m terrafix.cli process-once --failure-json test_failure.json
+```
+
+## Docker Deployment
+
+### 1. Build Image
+
+```bash
+docker build -t terrafix:latest .
+```
+
+### 2. Run Container
+
+```bash
+docker run --env-file .env terrafix:latest
+```
+
+### 3. Test Locally
+
+```bash
+# Create test failure JSON
+cat > test_failure.json << EOF
+{
+  "test_id": "test-123",
+  "test_name": "S3 Bucket Block Public Access",
+  "resource_arn": "arn:aws:s3:::my-test-bucket",
+  "resource_type": "AWS::S3::Bucket",
+  "failure_reason": "Bucket allows public access",
+  "severity": "high",
+  "framework": "SOC2",
+  "failed_at": "2025-11-14T10:00:00Z",
+  "current_state": {"block_public_access": false},
+  "required_state": {"block_public_access": true}
+}
 EOF
 
-# Review planned changes
+# Process test failure
+docker run --env-file .env -v $(pwd):/data terrafix:latest \
+  python -m terrafix.cli process-once --failure-json /data/test_failure.json
+```
+
+## ECS/Fargate Production Deployment
+
+### 1. Prerequisites
+
+- Existing VPC with public or private subnets
+- AWS credentials configured (`aws configure`)
+- Terraform installed
+
+### 2. Create ECR Repository
+
+```bash
+cd terraform
+terraform init
+terraform apply -target=aws_ecr_repository.terrafix
+```
+
+### 3. Build and Push Image
+
+```bash
+# Get ECR login
+aws ecr get-login-password --region us-west-2 | \
+  docker login --username AWS --password-stdin \
+  $(terraform output -raw ecr_repository_url | cut -d'/' -f1)
+
+# Build and tag
+docker build -t terrafix:latest .
+docker tag terrafix:latest $(terraform output -raw ecr_repository_url):latest
+
+# Push
+docker push $(terraform output -raw ecr_repository_url):latest
+```
+
+### 4. Configure Terraform Variables
+
+Create `terraform/terraform.tfvars`:
+
+```hcl
+# AWS Configuration
+aws_region = "us-west-2"
+environment = "prod"
+
+# Credentials (sensitive - use secure method to provide these)
+vanta_api_token = "vanta_oauth_token"
+github_token = "ghp_github_token"
+
+# Networking (replace with your VPC details)
+vpc_id = "vpc-xxxxx"
+subnet_ids = ["subnet-xxxxx", "subnet-yyyyy"]
+
+# Application Configuration
+github_repo_mapping = jsonencode({
+  default = "your-org/terraform-repo"
+})
+terraform_path = "terraform"
+poll_interval_seconds = 300
+
+# Resource Sizing
+cpu = 2048    # 2 vCPU
+memory = 4096 # 4 GB
+
+# Monitoring
+log_retention_days = 30
+```
+
+**Security Note**: Do NOT commit `terraform.tfvars` with credentials. Use AWS Secrets Manager, environment variables, or a secure vault.
+
+### 5. Deploy Infrastructure
+
+```bash
+cd terraform
+
+# Plan (review changes)
 terraform plan
 
-# Deploy infrastructure
-terraform apply -auto-approve
-
-# Save outputs for frontend configuration
-terraform output -json > outputs.json
+# Apply
+terraform apply
 ```
 
-**Expected Resources Created:**
-- 1 Lambda function (remediation-orchestrator)
-- 1 Lambda layer (dependencies)
-- 1 EventBridge custom bus (compliance-events)
-- 1 EventBridge rule (compliance-failure-rule)
-- 1 DynamoDB table (remediation-history)
-- 1 S3 bucket (test-vulnerable)
-- 1 IAM role + policy
-- 1 CloudWatch Log Group
-
-**Verify deployment:**
-```bash
-# Check Lambda exists
-aws lambda get-function --function-name remediation-orchestrator
-
-# Check DynamoDB table
-aws dynamodb describe-table --table-name remediation-history
-
-# Check S3 bucket (should have public access disabled = false)
-aws s3api get-public-access-block --bucket self-healing-test-${BUCKET_SUFFIX}
-```
-
-## Step 4: Configure Frontend
-
-**Time: 5 minutes**
+### 6. Verify Deployment
 
 ```bash
-# Navigate to frontend directory
-cd ../frontend
+# Check service status
+aws ecs describe-services \
+  --cluster $(terraform output -raw ecs_cluster_name) \
+  --services $(terraform output -raw ecs_service_name) \
+  --query 'services[0].{Status:status,DesiredCount:desiredCount,RunningCount:runningCount}'
 
-# Install dependencies
-npm install
-
-# Extract Terraform outputs
-cd ../terraform
-export TEST_BUCKET=$(terraform output -raw test_bucket_name)
-cd ../frontend
-
-# Create environment configuration
-cat > .env.local <<EOF
-# AWS Configuration
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
-AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
-
-# Resource Names
-DYNAMODB_TABLE_NAME=remediation-history
-EVENT_BUS_NAME=compliance-events
-TEST_BUCKET_NAME=${TEST_BUCKET}
-EOF
-
-# Verify environment file
-cat .env.local
+# Tail logs
+aws logs tail $(terraform output -raw cloudwatch_log_group) --follow
 ```
 
-**Important:** The `.env.local` file contains credentials and should never be committed to version control.
+## Configuration
 
-## Step 5: Launch Frontend
+### Environment Variables
 
-**Time: 2 minutes**
+All configuration is via environment variables:
 
-```bash
-# Start development server
-npm run dev
-```
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `VANTA_API_TOKEN` | Yes | - | Vanta OAuth token |
+| `GITHUB_TOKEN` | Yes | - | GitHub PAT with repo scope |
+| `AWS_REGION` | Yes | - | AWS region for Bedrock |
+| `AWS_ACCESS_KEY_ID` | Yes | - | AWS credentials |
+| `AWS_SECRET_ACCESS_KEY` | Yes | - | AWS credentials |
+| `BEDROCK_MODEL_ID` | No | `anthropic.claude-sonnet-4-5-v2:0` | Claude model ID |
+| `POLL_INTERVAL_SECONDS` | No | `300` | Vanta polling interval |
+| `SQLITE_PATH` | No | `./terrafix.db` | SQLite database path |
+| `GITHUB_REPO_MAPPING` | No | `{"default": ""}` | Resource to repo mapping |
+| `TERRAFORM_PATH` | No | `.` | Path to .tf files in repos |
+| `MAX_CONCURRENT_WORKERS` | No | `3` | Max parallel processing |
+| `LOG_LEVEL` | No | `INFO` | Logging level |
+| `STATE_RETENTION_DAYS` | No | `7` | Days to keep state records |
 
-Frontend should be running at: **http://localhost:3000**
+### GitHub Repository Mapping
 
-Open your browser and verify the dashboard loads.
+The `GITHUB_REPO_MAPPING` environment variable maps AWS resources to GitHub repositories:
 
-## Step 6: Test the System
-
-**Time: 2 minutes**
-
-### Option A: Test via Dashboard (Recommended)
-
-1. Open http://localhost:3000
-2. Click **"🚀 Trigger Test Event"** button
-3. Wait 2-5 seconds
-4. Event should appear in the table below
-5. Check that status shows "success" and action indicates "dry run"
-
-### Option B: Test via AWS CLI
-
-```bash
-# Navigate to project root
-cd ..
-
-# Update test event with your bucket name
-sed -i.bak "s/self-healing-test-xxxxx/${TEST_BUCKET}/g" events/vanta_test_failure.json
-
-# Send test event
-aws events put-events --entries file://events/vanta_test_failure.json
-
-# Watch Lambda logs in real-time
-aws logs tail /aws/lambda/remediation-orchestrator --follow
-```
-
-**Expected Log Output:**
-```
-Step 1: Invoking Bedrock...
-Invoking anthropic.claude-sonnet-4-5-v2:0
-Diagnosis: S3 bucket lacks Block Public Access controls...
-Step 2: Executing remediation...
-[DRY RUN] Would enable BPA for self-healing-test-xxxxx
-Step 3: Storing history...
-```
-
-### Verify Results
-
-```bash
-# Check DynamoDB for event
-aws dynamodb scan --table-name remediation-history --limit 1
-
-# Verify bucket state (should still be vulnerable since dry_run=true)
-aws s3api get-public-access-block --bucket ${TEST_BUCKET}
-```
-
-## Step 7: Enable Live Remediation (Optional)
-
-**Warning:** This will make actual changes to AWS resources.
-
-```bash
-cd terraform
-
-# Update terraform.tfvars
-sed -i.bak 's/dry_run = "true"/dry_run = "false"/' terraform.tfvars
-
-# Apply changes
-terraform apply -auto-approve
-
-# Trigger test event again
-cd ..
-aws events put-events --entries file://events/vanta_test_failure.json
-
-# Wait 5 seconds, then verify bucket is now protected
-aws s3api get-public-access-block --bucket ${TEST_BUCKET}
-```
-
-**Expected Output (after live remediation):**
 ```json
 {
-    "PublicAccessBlockConfiguration": {
-        "BlockPublicAcls": true,
-        "IgnorePublicAcls": true,
-        "BlockPublicPolicy": true,
-        "RestrictPublicBuckets": true
-    }
+  "default": "myorg/terraform-main",
+  "arn:aws:s3:::special-bucket": "myorg/terraform-s3",
+  "arn:aws:iam::123456:role": "myorg/terraform-iam"
 }
+```
+
+- `default`: Fallback repository for unmapped resources
+- Exact ARN matches take priority
+- Prefix matches work for patterns
+
+## Monitoring and Operations
+
+### CloudWatch Logs
+
+View structured JSON logs:
+
+```bash
+# Tail logs
+aws logs tail /ecs/terrafix-prod --follow
+
+# Query errors
+aws logs start-query \
+  --log-group-name /ecs/terrafix-prod \
+  --start-time $(date -u -d '1 hour ago' +%s) \
+  --end-time $(date -u +%s) \
+  --query-string 'fields @timestamp, message | filter level = "ERROR" | sort @timestamp desc'
+```
+
+### State Store Statistics
+
+```bash
+# Via CLI
+python -m terrafix.cli stats
+
+# Output:
+# State Store Statistics:
+#   Total records: 42
+#   Pending: 0
+#   In Progress: 2
+#   Completed: 38
+#   Failed: 2
+```
+
+### Update Deployment
+
+```bash
+# Build and push new image
+docker build -t terrafix:latest .
+docker tag terrafix:latest $(terraform output -raw ecr_repository_url):latest
+docker push $(terraform output -raw ecr_repository_url):latest
+
+# Force new deployment
+aws ecs update-service \
+  --cluster $(terraform output -raw ecs_cluster_name) \
+  --service $(terraform output -raw ecs_service_name) \
+  --force-new-deployment
+```
+
+### Cleanup Old State Records
+
+```bash
+# Via CLI
+python -m terrafix.cli cleanup --retention-days 7
+
+# Automatic cleanup runs every 10 polling cycles
 ```
 
 ## Troubleshooting
 
-### Issue: "Access Denied" when invoking Bedrock
+### Task Not Starting
 
-**Solution:**
-1. Verify model access is enabled in AWS Console
-2. Check IAM permissions for Lambda role
-3. Ensure you're using us-east-1 region
+**Symptoms**: ECS task immediately stops or fails to start
 
+**Diagnosis**:
 ```bash
-aws bedrock list-foundation-models --region us-east-1 | grep claude-sonnet-4-5
+# Check task status
+aws ecs describe-tasks \
+  --cluster terrafix-prod \
+  --tasks $(aws ecs list-tasks --cluster terrafix-prod --query 'taskArns[0]' --output text)
+
+# View logs
+aws logs tail /ecs/terrafix-prod --since 10m
 ```
 
-### Issue: Frontend shows "Failed to fetch events"
+**Common Causes**:
+- Missing or invalid Secrets Manager secrets
+- IAM role permissions insufficient
+- Invalid configuration (check `ConfigurationError` in logs)
+- Bedrock model not available in region
 
-**Solution:**
-1. Verify AWS credentials in `.env.local`
-2. Check DynamoDB table exists
-3. Test credentials:
+### No Failures Being Processed
 
+**Symptoms**: Service running but no PRs created
+
+**Diagnosis**:
 ```bash
-aws sts get-caller-identity
-aws dynamodb scan --table-name remediation-history
+# Check logs for Vanta API calls
+aws logs tail /ecs/terrafix-prod --follow | grep "Fetched failing tests"
+
+# Output should show:
+# {"level": "INFO", "message": "Fetched failing tests from Vanta", "count": 5}
 ```
 
-### Issue: EventBridge not triggering Lambda
+**Common Causes**:
+- Invalid Vanta API token
+- No failing tests in Vanta
+- `GITHUB_REPO_MAPPING` not configured (resources can't be mapped)
+- All failures already processed (check state store)
 
-**Solution:**
-1. Verify event pattern matches:
+### Bedrock API Errors
 
+**Symptoms**: Processing fails with `BedrockError`
+
+**Diagnosis**:
 ```bash
-aws events test-event-pattern \
-  --event-pattern '{"source":["vanta.compliance"],"detail-type":["Test Failed"]}' \
-  --event file://events/vanta_test_failure.json
+# Check for Bedrock errors
+aws logs tail /ecs/terrafix-prod | grep "BedrockError"
 ```
 
-2. Check Lambda permissions:
+**Common Causes**:
+- Model not available in region (use us-west-2)
+- Throttling (retries will handle this)
+- Invalid AWS credentials
+- Model ID incorrect
 
+### Duplicate PRs Created
+
+**Symptoms**: Multiple PRs for same failure
+
+**Expected Behavior**: SQLite state is ephemeral in ECS. After task restarts, previous state is lost.
+
+**Solutions**:
+- Accept as temporary limitation
+- Implement EFS volume for persistent state (see `terraform/README.md`)
+- Manually close duplicate PRs
+
+### GitHub Rate Limiting
+
+**Symptoms**: PRs fail with 429 status code
+
+**Diagnosis**:
 ```bash
-aws lambda get-policy --function-name remediation-orchestrator
+aws logs tail /ecs/terrafix-prod | grep "rate_limit"
 ```
 
-### Issue: Terraform apply fails with "bucket already exists"
+**Solution**: Service automatically retries with backoff. For high-volume scenarios, consider GitHub App authentication (higher limits).
 
-**Solution:**
+### High Memory Usage
+
+**Symptoms**: Task OOM killed
+
+**Diagnosis**:
 ```bash
-# Generate new unique bucket name
-export BUCKET_SUFFIX=$(uuidgen | cut -c1-8 | tr '[:upper:]' '[:lower:]')
-echo "test_bucket_name = \"self-healing-test-${BUCKET_SUFFIX}\"" >> terraform/terraform.tfvars
-
-terraform apply -auto-approve
+# Check Container Insights metrics
+aws cloudwatch get-metric-statistics \
+  --namespace ECS/ContainerInsights \
+  --metric-name MemoryUtilized \
+  --dimensions Name=ClusterName,Value=terrafix-prod \
+  --start-time $(date -u -d '1 hour ago' --iso-8601=seconds) \
+  --end-time $(date -u --iso-8601=seconds) \
+  --period 300 \
+  --statistics Average
 ```
 
-## Verification Checklist
-
-- [ ] Terraform applied successfully (no errors)
-- [ ] Lambda function exists and has Bedrock permissions
-- [ ] DynamoDB table created
-- [ ] S3 test bucket created (vulnerable state)
-- [ ] EventBridge rule created
-- [ ] Frontend starts without errors
-- [ ] Dashboard loads at http://localhost:3000
-- [ ] Test event triggers successfully
-- [ ] Event appears in dashboard table
-- [ ] DynamoDB contains event record
-- [ ] Lambda logs show Bedrock invocation
-
-## Next Steps
-
-1. **Review the demo script**: See `docs/DEMO_SCRIPT.md` for a 5-minute demo walkthrough
-2. **Explore the dashboard**: Monitor real-time events and metrics
-3. **Test different scenarios**: Create custom test events in `events/` directory
-4. **Add more remediations**: Extend `backend/src/remediation.py` with new resource types
-5. **Enable live mode**: Set `dry_run = "false"` for actual remediation
-
-## Cleanup
-
-When you're done testing:
-
-```bash
-# Destroy all AWS resources
-cd terraform
-terraform destroy -auto-approve
-
-# Stop frontend
-# Press Ctrl+C in the terminal running npm
+**Solution**: Increase memory in `terraform/variables.tf`:
+```hcl
+memory = 8192 # 8 GB
 ```
 
-## Cost Management
+## Security Best Practices
 
-**Estimated costs for testing (1 day):**
-- Lambda: $0.01
-- DynamoDB: $0.01
-- Bedrock: $0.10 (10-20 test events)
-- EventBridge: $0.00 (free tier)
-- S3: $0.00
-
-**Total: ~$0.12/day**
-
-To minimize costs:
-1. Destroy resources when not testing (`terraform destroy`)
-2. Use dry_run mode by default
-3. Set Lambda timeout to minimum required
-4. Use DynamoDB on-demand billing
+1. **Secrets Management**: Store credentials in AWS Secrets Manager, not environment variables
+2. **IAM Roles**: Use least-privilege roles (provided by Terraform)
+3. **Network Security**: Use private subnets with NAT gateway
+4. **Image Scanning**: Enable ECR vulnerability scanning (configured)
+5. **Log Encryption**: CloudWatch Logs encrypted at rest by default
+6. **Non-Root User**: Container runs as non-root user
+7. **Token Rotation**: Rotate Vanta and GitHub tokens regularly
 
 ## Support
 
-- **Documentation**: See `README.md` for full documentation
-- **Troubleshooting**: See `docs/TROUBLESHOOTING.md` for detailed solutions
-- **Architecture**: See `PLAN.md` for system design details
-
----
-
-**Ready to deploy?** Start with Step 1 above!
+For issues or questions:
+- Check logs first: `aws logs tail /ecs/terrafix-prod --follow`
+- Review this guide and `terraform/README.md`
+- Check GitHub issues for known problems
+- File new issue with logs and configuration (redact secrets)
 

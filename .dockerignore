@@ -55,21 +55,26 @@ terrafix.db
 terrafix.db-journal
 *.log
 
-# Terraform
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Architecture
+*.png
+
+# Terraform state
 *.tfstate
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
 
-# Docker
-*.tar
-*.tar.gz
+# CI/CD
+.github/
 
-# OS
-.DS_Store
-Thumbs.db
+# Development
+requirements-dev.txt
 
-# Temporary files
-tmp/
-temp/
-*.tmp

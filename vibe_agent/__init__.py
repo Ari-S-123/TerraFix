@@ -1,2 +1,0 @@
-# VibeGuardian Lambda Function
-

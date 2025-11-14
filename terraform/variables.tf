@@ -1,41 +1,76 @@
+/**
+ * Terraform variables for TerraFix infrastructure.
+ */
+
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS region for deployment"
   type        = string
-  default     = "us-east-1"
+  default     = "us-west-2"
 }
 
-variable "lambda_function_name" {
-  description = "Lambda function name"
+variable "project_name" {
+  description = "Project name for resource naming"
   type        = string
-  default     = "remediation-orchestrator"
+  default     = "terrafix"
 }
 
-variable "dynamodb_table_name" {
-  description = "DynamoDB table name"
+variable "environment" {
+  description = "Environment (dev, staging, prod)"
   type        = string
-  default     = "remediation-history"
+  default     = "prod"
 }
 
-variable "test_bucket_name" {
-  description = "Test S3 bucket name (must be globally unique)"
+variable "cpu" {
+  description = "Fargate task CPU units (1024 = 1 vCPU)"
+  type        = number
+  default     = 2048 # 2 vCPU
+}
+
+variable "memory" {
+  description = "Fargate task memory in MB"
+  type        = number
+  default     = 4096 # 4 GB
+}
+
+variable "vanta_api_token" {
+  description = "Vanta OAuth token (stored in Secrets Manager)"
   type        = string
+  sensitive   = true
+}
+
+variable "github_token" {
+  description = "GitHub personal access token (stored in Secrets Manager)"
+  type        = string
+  sensitive   = true
 }
 
 variable "bedrock_model_id" {
-  description = "Bedrock model ID"
+  description = "AWS Bedrock Claude model ID"
   type        = string
   default     = "anthropic.claude-sonnet-4-5-v2:0"
 }
 
-variable "log_level" {
-  description = "Lambda log level"
-  type        = string
-  default     = "INFO"
+variable "poll_interval_seconds" {
+  description = "Vanta polling interval in seconds"
+  type        = number
+  default     = 300
 }
 
-variable "dry_run" {
-  description = "Dry run mode (true/false)"
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days"
+  type        = number
+  default     = 30
+}
+
+variable "github_repo_mapping" {
+  description = "JSON mapping of resource patterns to GitHub repos"
   type        = string
-  default     = "true"
+  default     = "{\"default\": \"\"}"
+}
+
+variable "terraform_path" {
+  description = "Path within repos to Terraform files"
+  type        = string
+  default     = "."
 }
 

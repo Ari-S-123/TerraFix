@@ -1,16 +1,34 @@
-output "lambda_function_arn" {
-  value = aws_lambda_function.remediation_orchestrator.arn
+/**
+ * Terraform outputs for TerraFix infrastructure.
+ */
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for TerraFix image"
+  value       = aws_ecr_repository.terrafix.repository_url
 }
 
-output "event_bus_arn" {
-  value = aws_cloudwatch_event_bus.compliance.arn
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = aws_ecs_cluster.terrafix.name
 }
 
-output "dynamodb_table_name" {
-  value = aws_dynamodb_table.remediation_history.name
+output "ecs_service_name" {
+  description = "ECS service name"
+  value       = aws_ecs_service.terrafix.name
 }
 
-output "test_bucket_name" {
-  value = aws_s3_bucket.test_vulnerable.bucket
+output "cloudwatch_log_group" {
+  description = "CloudWatch log group name"
+  value       = aws_cloudwatch_log_group.terrafix.name
+}
+
+output "task_role_arn" {
+  description = "ECS task role ARN"
+  value       = aws_iam_role.ecs_task.arn
+}
+
+output "execution_role_arn" {
+  description = "ECS execution role ARN"
+  value       = aws_iam_role.ecs_execution.arn
 }
 
