@@ -1,3 +1,9 @@
+TODO:
+
+- Probably have to either move off SQLite (because of ephemeral state) or think of some other way of avoiding race conditions or duplication if the same compliance "issue" gets detected again before it gets fixed.
+- Try to implement better durable execution (automatic retries, etc).
+- Lots of testing.
+
 # TerraFix: AI-Powered Terraform Compliance Remediation Bot
 
 **TerraFix** is a long-running service that automatically detects Vanta compliance failures, analyzes Terraform configurations, generates compliant fixes using Claude Sonnet 4.5 via AWS Bedrock, and opens GitHub Pull Requests for human review.
