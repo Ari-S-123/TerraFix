@@ -2,11 +2,20 @@
 AWS Bedrock client for Terraform remediation generation.
 
 This module constructs prompts with full context about compliance failures
-and existing Terraform configuration, then uses Claude Sonnet 4.5 via AWS
+and existing Terraform configuration, then uses Claude Opus 4.5 via AWS
 Bedrock to generate compliant fixes in proper HCL format.
 
 The generator maintains a library of Terraform documentation snippets for
 common resource types to improve fix quality.
+
+Implementation follows AWS Bedrock documentation:
+- https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-claude.html
+- https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+
+And Anthropic prompting best practices:
+- Uses system prompts for persona/role definition
+- Leverages XML tags for structured context
+- Uses low temperature for deterministic, consistent output
 
 Usage:
     from terrafix.remediation_generator import TerraformRemediationGenerator
@@ -30,6 +39,7 @@ import json
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, Field
 
@@ -40,7 +50,8 @@ from terrafix.vanta_client import Failure
 logger = get_logger(__name__)
 
 # Maximum tokens for prompt to avoid exceeding model limits
-MAX_PROMPT_TOKENS = 100000  # Conservative estimate for Sonnet 4.5
+# Claude Opus 4.5 supports up to 200K input tokens, using conservative limit
+MAX_PROMPT_TOKENS = 100000
 
 
 class RemediationFix(BaseModel):
@@ -82,34 +93,92 @@ class TerraformRemediationGenerator:
     """
     Generates Terraform configuration fixes using Claude via Bedrock.
 
-    Uses AWS Bedrock to invoke Claude Sonnet 4.5 with carefully constructed
+    Uses AWS Bedrock to invoke Claude Opus 4.5 with carefully constructed
     prompts containing failure context and Terraform documentation.
 
+    Per AWS Bedrock documentation, Claude 3.7 Sonnet and Claude 4 models have
+    a 60-minute timeout period for inference calls. This client is configured
+    with appropriate read timeout settings.
+
+    Reference:
+        https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+
     Attributes:
-        bedrock_client: Boto3 Bedrock Runtime client
-        model_id: Claude model identifier
+        bedrock_client: Boto3 Bedrock Runtime client configured with extended timeout
+        model_id: Claude model identifier (e.g., "anthropic.claude-opus-4-5-20251101-v1:0")
+        system_prompt: System prompt defining the AI assistant's role and behavior
     """
+
+    # System prompt following Anthropic best practices for role definition
+    # Per AWS docs: "A system prompt lets you provide context and instructions
+    # to Anthropic Claude, such as specifying a particular goal or role."
+    DEFAULT_SYSTEM_PROMPT: str = """You are a senior DevOps engineer and compliance expert specializing in Terraform and AWS security best practices.
+
+Your expertise includes:
+- Infrastructure as Code (IaC) with Terraform 1.0+
+- AWS security controls and compliance frameworks (SOC 2, HIPAA, PCI-DSS)
+- HCL syntax and Terraform style conventions
+- Cloud security architecture and remediation strategies
+
+Your task is to analyze compliance failures and generate precise, minimal Terraform configuration fixes that:
+1. Address the specific compliance requirement completely
+2. Follow Terraform best practices and style conventions
+3. Preserve existing functionality and dependencies
+4. Include appropriate documentation comments
+
+You always respond with valid JSON containing the fix details. You never include explanatory text outside the JSON structure."""
 
     def __init__(
         self,
         model_id: str = "anthropic.claude-opus-4-5-20251101-v1:0",
         region: str = "us-west-2",
+        read_timeout_seconds: int = 3600,
     ) -> None:
         """
-        Initialize Bedrock Claude client.
+        Initialize Bedrock Claude client with appropriate timeout configuration.
+
+        Per AWS Bedrock documentation for Claude 3.7 Sonnet and Claude 4 models:
+        "The timeout period for inference calls [...] is 60 minutes. By default,
+        AWS SDK clients timeout after 1 minute. We recommend that you increase
+        the read timeout period of your AWS SDK client to at least 60 minutes."
 
         Args:
-            model_id: Claude model ID (default: Sonnet 4.5)
-            region: AWS region for Bedrock
+            model_id: Claude model ID. Default is Claude Opus 4.5.
+                      Format: anthropic.claude-{variant}-{version}-v{api_version}:0
+            region: AWS region for Bedrock. Must be a region where Bedrock is available.
+            read_timeout_seconds: Read timeout in seconds for API calls.
+                                  Default is 3600 (60 minutes) per AWS recommendation.
+
+        Raises:
+            botocore.exceptions.NoRegionError: If region is invalid or unavailable
+            botocore.exceptions.NoCredentialsError: If AWS credentials not configured
 
         Example:
             >>> generator = TerraformRemediationGenerator()
+            >>> generator = TerraformRemediationGenerator(
+            ...     model_id="anthropic.claude-sonnet-4-20250514-v1:0",
+            ...     region="us-east-1",
+            ...     read_timeout_seconds=1800  # 30 minutes for simpler tasks
+            ... )
         """
+        # Configure boto3 with extended read timeout per AWS documentation
+        # Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+        bedrock_config = Config(
+            read_timeout=read_timeout_seconds,
+            connect_timeout=60,  # 1 minute for initial connection
+            retries={
+                "max_attempts": 3,
+                "mode": "adaptive",  # Adaptive retry mode handles throttling
+            },
+        )
+
         self.bedrock_client = boto3.client(
             service_name="bedrock-runtime",
             region_name=region,
+            config=bedrock_config,
         )
         self.model_id = model_id
+        self.system_prompt = self.DEFAULT_SYSTEM_PROMPT
 
         log_with_context(
             logger,
@@ -117,6 +186,7 @@ class TerraformRemediationGenerator:
             "Initialized Bedrock client",
             model_id=self.model_id,
             region=region,
+            read_timeout_seconds=read_timeout_seconds,
         )
 
     def generate_fix(
@@ -230,58 +300,68 @@ class TerraformRemediationGenerator:
         module_context: dict[str, Any],
     ) -> str:
         """
-        Construct detailed prompt for Claude.
+        Construct detailed prompt for Claude using XML tags per Anthropic guidelines.
 
-        Includes compliance requirement details, current Terraform configuration,
-        Terraform best practices context, and expected output format.
+        Per Anthropic documentation: "Claude models support the use of XML tags to
+        structure and delineate your prompts. Use descriptive tag names for optimal
+        results."
+
+        Reference:
+            https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags
+
+        The prompt structure follows Anthropic best practices:
+        - Clear separation of context from instructions
+        - XML tags for structured data sections
+        - Explicit output format specification
+        - Critical constraints clearly stated
 
         Args:
-            failure: Vanta failure details
-            current_config: Current Terraform file content
-            resource_block: Resource block that failed
-            module_context: Module-level context
+            failure: Vanta failure details containing test information and required state
+            current_config: Current Terraform file content to be modified
+            resource_block: Specific resource block that failed compliance
+            module_context: Surrounding module context for dependency awareness
 
         Returns:
-            Complete prompt string for Claude
+            Complete prompt string formatted with XML tags for Claude
         """
         terraform_docs = self._get_terraform_docs_for_resource(failure.resource_type)
 
-        prompt = f"""You are a senior DevOps engineer and compliance expert specializing in Terraform and AWS security best practices.
+        # Construct prompt using XML tags per Anthropic guidelines
+        # XML tags help Claude parse structured information more accurately
+        prompt = f"""<compliance_failure>
+<test_name>{failure.test_name}</test_name>
+<severity>{failure.severity}</severity>
+<framework>{failure.framework}</framework>
+<resource_arn>{failure.resource_arn}</resource_arn>
+<resource_type>{failure.resource_type}</resource_type>
+<failure_reason>{failure.failure_reason}</failure_reason>
 
-# COMPLIANCE FAILURE
-
-**Test**: {failure.test_name}
-**Severity**: {failure.severity}
-**Framework**: {failure.framework}
-**Resource**: {failure.resource_arn}
-**Resource Type**: {failure.resource_type}
-
-**Failure Reason**: {failure.failure_reason}
-
-**Current State**:
-```json
+<current_state>
 {json.dumps(failure.current_state, indent=2)}
-```
+</current_state>
 
-**Required State**:
-```json
+<required_state>
 {json.dumps(failure.required_state, indent=2)}
-```
+</required_state>
+</compliance_failure>
 
-# CURRENT TERRAFORM CONFIGURATION
-
-```hcl
+<current_terraform_configuration>
 {current_config}
-```
+</current_terraform_configuration>
 
-# RESOURCE BLOCK CONTEXT
-
-```json
+<resource_block_context>
 {json.dumps(resource_block, indent=2)}
-```
+</resource_block_context>
 
-# TASK
+<module_context>
+{json.dumps(module_context, indent=2)}
+</module_context>
 
+<terraform_documentation>
+{terraform_docs}
+</terraform_documentation>
+
+<task>
 Generate a Terraform configuration fix that:
 1. Addresses the compliance failure completely
 2. Maintains existing resource dependencies
@@ -289,40 +369,38 @@ Generate a Terraform configuration fix that:
 4. Uses proper HCL syntax compatible with Terraform 1.0+
 5. Preserves any existing tags, lifecycle rules, or metadata
 6. Includes appropriate inline comments explaining security controls
+</task>
 
-# TERRAFORM DOCUMENTATION CONTEXT
-
-{terraform_docs}
-
-# RESPONSE FORMAT (JSON)
-
-Respond ONLY with valid JSON in this exact format (no markdown, no preamble):
+<output_format>
+Respond ONLY with valid JSON matching this exact schema. Do not include any text before or after the JSON object:
 
 {{
-  "fixed_config": "<complete updated Terraform file content>",
-  "explanation": "<human-readable explanation of changes>",
-  "changed_attributes": ["attribute1", "attribute2"],
-  "reasoning": "<why these changes address the compliance failure>",
-  "confidence": "high|medium|low",
-  "breaking_changes": "<any potential breaking changes or migration notes>",
-  "additional_requirements": "<any manual steps required after applying>"
+  "fixed_config": "Complete updated Terraform file content as a string",
+  "explanation": "Human-readable explanation of what changes were made and why",
+  "changed_attributes": ["List", "of", "modified", "attribute", "names"],
+  "reasoning": "Technical explanation of why these specific changes address the compliance failure",
+  "confidence": "high OR medium OR low",
+  "breaking_changes": "Description of any breaking changes or 'None identified' if none",
+  "additional_requirements": "Manual steps required after applying or 'None' if none"
 }}
+</output_format>
 
-# CRITICAL REQUIREMENTS
+<critical_constraints>
+- The fix MUST be syntactically valid HCL that passes terraform validate
+- Do NOT change resource names, identifiers, or logical names
+- Do NOT remove existing configuration unless strictly necessary for compliance
+- Preserve all existing comments and formatting where possible
+- Use terraform fmt style conventions (2-space indentation, aligned equals signs)
+- Apply the minimum changes necessary to resolve the compliance issue
+- All string values in the JSON must have special characters properly escaped
+</critical_constraints>
 
-- The fix MUST be syntactically valid HCL
-- Do NOT change resource names or identifiers
-- Do NOT remove existing configuration unless necessary
-- Preserve all comments and formatting where possible
-- Use terraform fmt style conventions
-- Only modify the minimum necessary to fix the compliance issue
-
-Generate the JSON response now:"""
+Generate the JSON response:"""
 
         log_with_context(
             logger,
             "debug",
-            "Constructed prompt",
+            "Constructed prompt with XML tags",
             prompt_length=len(prompt),
             test_id=failure.test_id,
         )
@@ -487,37 +565,86 @@ resource "aws_db_instance" "example" {
 
     def _invoke_claude(self, prompt: str) -> dict[str, Any]:
         """
-        Call Bedrock to invoke Claude Sonnet 4.5.
+        Call Bedrock to invoke Claude Opus 4.5 using the Messages API.
+
+        Implements the Anthropic Claude Messages API as documented:
+        https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+
+        Request body structure follows AWS Bedrock specification:
+        - anthropic_version: Required API version string
+        - max_tokens: Maximum tokens to generate (required)
+        - system: System prompt for role/context definition (Claude 2.1+)
+        - messages: Array of user/assistant message turns
+        - temperature: Randomness control (0-1, lower = more deterministic)
+        - top_p: Nucleus sampling threshold
+        - top_k: Limits sampling to top K options
+        - stop_sequences: Custom sequences that halt generation
 
         Args:
-            prompt: Constructed prompt with failure context
+            prompt: Constructed prompt with failure context and XML tags
 
         Returns:
-            Raw Bedrock API response
+            Raw Bedrock API response containing:
+            - content: Array of content blocks with generated text
+            - stop_reason: Why generation stopped ("end_turn", "stop_sequence", "max_tokens")
+            - usage: Token usage statistics
 
         Raises:
-            BedrockError: If Bedrock API call fails
+            BedrockError: If Bedrock API call fails (wraps ClientError)
         """
-        body = {
+        # Construct request body per AWS Bedrock Messages API specification
+        # Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+        body: dict[str, Any] = {
+            # Required: API version for Bedrock
             "anthropic_version": "bedrock-2023-05-31",
+            # Required: Maximum tokens to generate
+            # Per AWS docs: "We recommend a limit of 4,000 tokens for optimal performance"
             "max_tokens": 4096,
+            # System prompt: Defines the assistant's role and behavior
+            # Per AWS docs: "A system prompt lets you provide context and instructions
+            # to Anthropic Claude, such as specifying a particular goal or role."
+            # Note: Requires Claude 2.1 or greater
+            "system": self.system_prompt,
+            # Messages array: The conversation history
+            # Each message has 'role' ("user" or "assistant") and 'content'
             "messages": [
                 {
                     "role": "user",
+                    # Content can be string or array of content blocks
+                    # Using string shorthand for single text block
                     "content": prompt,
                 }
             ],
-            "temperature": 0.1,  # Low temperature for consistency
-            "top_p": 0.9,
+            # Temperature: Controls randomness (0 = deterministic, 1 = creative)
+            # Using low temperature for consistent, reliable code generation
+            "temperature": 0.1,
+            # top_p: Nucleus sampling - cumulative probability threshold
+            # Per AWS docs: "Alter either temperature or top_p, but not both"
+            # We keep both but with complementary values for code generation
+            "top_p": 0.95,
+            # top_k: Limits sampling to top K most likely tokens
+            # Per AWS docs: "Use top_k to remove long tail low probability responses"
+            # Value of 250 balances diversity with reliability
+            "top_k": 250,
+            # stop_sequences: Custom strings that halt generation
+            # Per AWS docs: "Sequences that will cause the model to stop generating"
+            # Using these to ensure clean JSON output termination
+            "stop_sequences": [
+                "\n\n\n",  # Triple newline indicates end of JSON
+                "```",  # Prevent markdown code block wrapping
+            ],
         }
 
         log_with_context(
             logger,
             "debug",
-            "Invoking Bedrock",
+            "Invoking Bedrock Claude API",
             model_id=self.model_id,
             max_tokens=body["max_tokens"],
             temperature=body["temperature"],
+            top_p=body["top_p"],
+            top_k=body["top_k"],
+            has_system_prompt=bool(body.get("system")),
         )
 
         response = self.bedrock_client.invoke_model(
@@ -527,7 +654,18 @@ resource "aws_db_instance" "example" {
             accept="application/json",
         )
 
-        return json.loads(response["body"].read())
+        response_body = json.loads(response["body"].read())
+
+        # Log response metadata for debugging
+        log_with_context(
+            logger,
+            "debug",
+            "Received Bedrock response",
+            stop_reason=response_body.get("stop_reason"),
+            usage=response_body.get("usage"),
+        )
+
+        return response_body
 
     def _parse_response(self, response: dict[str, Any]) -> RemediationFix:
         """
