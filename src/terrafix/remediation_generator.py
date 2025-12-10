@@ -38,9 +38,9 @@ Usage:
 import json
 from typing import Any
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError
+import boto3  # type: ignore[import-untyped]
+from botocore.config import Config  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 from terrafix.errors import BedrockError
@@ -172,13 +172,13 @@ You always respond with valid JSON containing the fix details. You never include
             },
         )
 
-        self.bedrock_client = boto3.client(
+        self.bedrock_client: Any = boto3.client(
             service_name="bedrock-runtime",
             region_name=region,
             config=bedrock_config,
         )
-        self.model_id = model_id
-        self.system_prompt = self.DEFAULT_SYSTEM_PROMPT
+        self.model_id: str = model_id
+        self.system_prompt: str = self.DEFAULT_SYSTEM_PROMPT
 
         log_with_context(
             logger,
@@ -193,8 +193,8 @@ You always respond with valid JSON containing the fix details. You never include
         self,
         failure: Failure,
         current_config: str,
-        resource_block: dict[str, Any],
-        module_context: dict[str, Any],
+        resource_block: dict[str, object],
+        module_context: dict[str, object],
     ) -> RemediationFix:
         """
         Generate Terraform configuration fix.
@@ -266,8 +266,10 @@ You always respond with valid JSON containing the fix details. You never include
             return fix
 
         except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+            error_dict: dict[str, Any] = e.response.get("Error", {})
+            metadata_dict: dict[str, Any] = e.response.get("ResponseMetadata", {})
+            error_code: str = str(error_dict.get("Code", "Unknown"))
+            request_id: str | None = str(metadata_dict.get("RequestId")) if metadata_dict.get("RequestId") else None
 
             log_with_context(
                 logger,
@@ -296,8 +298,8 @@ You always respond with valid JSON containing the fix details. You never include
         self,
         failure: Failure,
         current_config: str,
-        resource_block: dict[str, Any],
-        module_context: dict[str, Any],
+        resource_block: dict[str, object],
+        module_context: dict[str, object],
     ) -> str:
         """
         Construct detailed prompt for Claude using XML tags per Anthropic guidelines.
@@ -563,7 +565,7 @@ resource "aws_db_instance" "example" {
 
         return docs_map.get(resource_type, "# No specific docs available")
 
-    def _invoke_claude(self, prompt: str) -> dict[str, Any]:
+    def _invoke_claude(self, prompt: str) -> dict[str, object]:
         """
         Call Bedrock to invoke Claude Opus 4.5 using the Messages API.
 
@@ -594,12 +596,16 @@ resource "aws_db_instance" "example" {
         """
         # Construct request body per AWS Bedrock Messages API specification
         # Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+        max_tokens: int = 4096
+        temperature: float = 0.1
+        top_p: float = 0.95
+        top_k: int = 250
         body: dict[str, Any] = {
             # Required: API version for Bedrock
             "anthropic_version": "bedrock-2023-05-31",
             # Required: Maximum tokens to generate
             # Per AWS docs: "We recommend a limit of 4,000 tokens for optimal performance"
-            "max_tokens": 4096,
+            "max_tokens": max_tokens,
             # System prompt: Defines the assistant's role and behavior
             # Per AWS docs: "A system prompt lets you provide context and instructions
             # to Anthropic Claude, such as specifying a particular goal or role."
@@ -617,15 +623,15 @@ resource "aws_db_instance" "example" {
             ],
             # Temperature: Controls randomness (0 = deterministic, 1 = creative)
             # Using low temperature for consistent, reliable code generation
-            "temperature": 0.1,
+            "temperature": temperature,
             # top_p: Nucleus sampling - cumulative probability threshold
             # Per AWS docs: "Alter either temperature or top_p, but not both"
             # We keep both but with complementary values for code generation
-            "top_p": 0.95,
+            "top_p": top_p,
             # top_k: Limits sampling to top K most likely tokens
             # Per AWS docs: "Use top_k to remove long tail low probability responses"
             # Value of 250 balances diversity with reliability
-            "top_k": 250,
+            "top_k": top_k,
             # stop_sequences: Custom strings that halt generation
             # Per AWS docs: "Sequences that will cause the model to stop generating"
             # Using these to ensure clean JSON output termination
@@ -640,34 +646,36 @@ resource "aws_db_instance" "example" {
             "debug",
             "Invoking Bedrock Claude API",
             model_id=self.model_id,
-            max_tokens=body["max_tokens"],
-            temperature=body["temperature"],
-            top_p=body["top_p"],
-            top_k=body["top_k"],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
             has_system_prompt=bool(body.get("system")),
         )
 
-        response = self.bedrock_client.invoke_model(
+        response: dict[str, Any] = self.bedrock_client.invoke_model(
             modelId=self.model_id,
             body=json.dumps(body),
             contentType="application/json",
             accept="application/json",
         )
 
-        response_body = json.loads(response["body"].read())
+        response_body: dict[str, Any] = json.loads(response["body"].read())
 
         # Log response metadata for debugging
+        stop_reason: str = str(response_body.get("stop_reason", ""))
+        usage: dict[str, int] = response_body.get("usage", {})
         log_with_context(
             logger,
             "debug",
             "Received Bedrock response",
-            stop_reason=response_body.get("stop_reason"),
-            usage=response_body.get("usage"),
+            stop_reason=stop_reason,
+            usage=usage,
         )
 
         return response_body
 
-    def _parse_response(self, response: dict[str, Any]) -> RemediationFix:
+    def _parse_response(self, response: dict[str, object]) -> RemediationFix:
         """
         Extract structured fix from Claude's response.
 
@@ -682,14 +690,22 @@ resource "aws_db_instance" "example" {
         Raises:
             BedrockError: If response cannot be parsed or is invalid
         """
-        content = response.get("content", [])
-        if not content:
+        content_list_raw: object = response.get("content", [])
+        if not content_list_raw or not isinstance(content_list_raw, list):
             raise BedrockError(
                 "Empty Claude response",
                 retryable=False,
             )
+        content_list: list[dict[str, object]] = content_list_raw  # type: ignore[assignment]
 
-        text = content[0].get("text", "").strip()
+        first_content_raw: object = content_list[0]
+        if not isinstance(first_content_raw, dict):
+            raise BedrockError(
+                "Invalid Claude response format",
+                retryable=False,
+            )
+        first_content: dict[str, object] = first_content_raw  # type: ignore[assignment]
+        text: str = str(first_content.get("text", "")).strip()
 
         log_with_context(
             logger,
@@ -705,7 +721,7 @@ resource "aws_db_instance" "example" {
             text = text.split("```")[1].split("```")[0].strip()
 
         try:
-            parsed = json.loads(text)
+            parsed: dict[str, object] = json.loads(text)
         except json.JSONDecodeError as e:
             log_with_context(
                 logger,
@@ -720,7 +736,7 @@ resource "aws_db_instance" "example" {
             ) from e
 
         # Validate required fields
-        required = ["fixed_config", "explanation", "confidence"]
+        required: list[str] = ["fixed_config", "explanation", "confidence"]
         for field in required:
             if field not in parsed:
                 raise BedrockError(
@@ -730,7 +746,25 @@ resource "aws_db_instance" "example" {
 
         # Create RemediationFix with validation
         try:
-            return RemediationFix(**parsed)
+            # Convert all values to expected types for RemediationFix
+            fixed_config_val: str = str(parsed.get("fixed_config", ""))
+            explanation_val: str = str(parsed.get("explanation", ""))
+            confidence_val: str = str(parsed.get("confidence", "medium"))
+            changed_attrs_raw: object = parsed.get("changed_attributes", [])
+            changed_attributes_val: list[str] = list(changed_attrs_raw) if isinstance(changed_attrs_raw, list) else []  # type: ignore[arg-type]
+            reasoning_val: str = str(parsed.get("reasoning", ""))
+            breaking_changes_val: str = str(parsed.get("breaking_changes", "None identified"))
+            additional_requirements_val: str = str(parsed.get("additional_requirements", "None"))
+            
+            return RemediationFix(
+                fixed_config=fixed_config_val,
+                explanation=explanation_val,
+                confidence=confidence_val,
+                changed_attributes=changed_attributes_val,
+                reasoning=reasoning_val,
+                breaking_changes=breaking_changes_val,
+                additional_requirements=additional_requirements_val,
+            )
         except Exception as e:
             log_with_context(
                 logger,

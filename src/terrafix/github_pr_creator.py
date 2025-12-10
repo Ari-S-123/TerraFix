@@ -23,10 +23,11 @@ Usage:
 
 import hashlib
 import json
-from typing import Any
 
 from github import Github, GithubException
 from github.GithubException import UnknownObjectException
+from github.PullRequest import PullRequest
+from github.Repository import Repository
 
 from terrafix.errors import GitHubError
 from terrafix.logging_config import get_logger, log_with_context
@@ -47,6 +48,9 @@ class GitHubPRCreator:
         gh_client: PyGithub client instance
         token: GitHub personal access token
     """
+
+    gh_client: Github
+    token: str
 
     def __init__(self, github_token: str) -> None:
         """
@@ -141,7 +145,7 @@ class GitHubPRCreator:
         # Atomic branch creation - try to create first, handle conflict
         # This prevents race conditions when multiple workers process similar failures
         try:
-            repo.create_git_ref(
+            _ = repo.create_git_ref(
                 ref=f"refs/heads/{branch_name}",
                 sha=base_sha,
             )
@@ -156,7 +160,8 @@ class GitHubPRCreator:
 
         except GithubException as e:
             # Check for "Reference already exists" error (HTTP 422)
-            if e.status == 422 and "Reference already exists" in str(e.data):
+            data_str: str = str(e.data) if e.data else ""
+            if e.status == 422 and "Reference already exists" in data_str:
                 # Branch already exists - another worker handled this failure
                 log_with_context(
                     logger,
@@ -180,7 +185,14 @@ class GitHubPRCreator:
             # Commit updated file
             commit_message = self._generate_commit_message(failure)
 
-            repo.update_file(
+            # Handle case where get_contents returns a list (directory) vs single file
+            if isinstance(file_content, list):
+                raise GitHubError(
+                    f"Expected file but got directory at {file_path}",
+                    retryable=False,
+                )
+
+            _ = repo.update_file(
                 path=file_path,
                 message=commit_message,
                 content=new_content,
@@ -255,7 +267,7 @@ class GitHubPRCreator:
         rate_limit_remaining = None
         rate_limit_reset = None
         
-        if hasattr(exception, "headers"):
+        if hasattr(exception, "headers") and exception.headers is not None:
             rate_limit_remaining = exception.headers.get("X-RateLimit-Remaining")
             rate_limit_reset = exception.headers.get("X-RateLimit-Reset")
 
@@ -280,7 +292,7 @@ class GitHubPRCreator:
             retryable=retryable,
         )
 
-    def _cleanup_branch(self, repo: Any, branch_name: str) -> None:
+    def _cleanup_branch(self, repo: Repository, branch_name: str) -> None:
         """
         Clean up a branch that was created but failed during processing.
 
@@ -311,9 +323,9 @@ class GitHubPRCreator:
 
     def _add_labels_safe(
         self,
-        pr: Any,
+        pr: PullRequest,
         labels: list[str],
-        repo: Any,
+        repo: Repository,
     ) -> None:
         """
         Add labels to PR, creating them if they don't exist.
@@ -325,11 +337,11 @@ class GitHubPRCreator:
         """
         for label in labels:
             try:
-                repo.get_label(label)
+                _ = repo.get_label(label)
             except UnknownObjectException:
                 # Create label if it doesn't exist
                 try:
-                    repo.create_label(
+                    _ = repo.create_label(
                         name=label,
                         color="0366d6",  # Blue color
                     )

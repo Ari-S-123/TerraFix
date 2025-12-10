@@ -43,7 +43,8 @@ import sys
 import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
-from typing import Any
+from types import TracebackType
+from typing import Callable, override
 
 # Context variable for correlation ID that propagates through async/sync calls
 _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -68,6 +69,7 @@ class StructuredFormatter(logging.Formatter):
     Additional fields are included from the LogRecord extras.
     """
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         """
         Format log record as JSON.
@@ -79,7 +81,7 @@ class StructuredFormatter(logging.Formatter):
             JSON string representation of log record
         """
         # Build base log entry
-        log_entry: dict[str, Any] = {
+        log_entry: dict[str, object] = {
             "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -118,8 +120,9 @@ class StructuredFormatter(logging.Formatter):
         }
 
         for key, value in record.__dict__.items():
+            record_value: object = value
             if key not in standard_attrs and not key.startswith("_"):
-                log_entry[key] = value
+                log_entry[key] = record_value
 
         return json.dumps(log_entry)
 
@@ -210,7 +213,7 @@ def set_correlation_id(correlation_id: str) -> None:
         >>> set_correlation_id(correlation_id)
         >>> logger.info("This log will include correlation_id")
     """
-    _correlation_id.set(correlation_id)
+    _ = _correlation_id.set(correlation_id)
 
 
 def get_correlation_id() -> str | None:
@@ -238,14 +241,14 @@ def clear_correlation_id() -> None:
     Example:
         >>> clear_correlation_id()
     """
-    _correlation_id.set(None)
+    _ = _correlation_id.set(None)
 
 
 def log_with_context(
     logger: logging.Logger,
     level: str,
     message: str,
-    **context: Any,
+    **context: object,
 ) -> None:
     """
     Log message with additional structured context.
@@ -270,8 +273,8 @@ def log_with_context(
         ...     severity="high",
         ... )
     """
-    log_func = getattr(logger, level.lower())
-    log_func(message, extra=context)
+    log_func: Callable[..., None] = getattr(logger, level.lower())
+    log_func(message, extra=dict(context))
 
 
 class LogContext:
@@ -294,7 +297,7 @@ class LogContext:
         Args:
             correlation_id: Optional correlation ID to use (generates new if None)
         """
-        self.correlation_id = correlation_id or generate_correlation_id()
+        self.correlation_id: str = correlation_id or generate_correlation_id()
 
     def __enter__(self) -> str:
         """
@@ -306,7 +309,12 @@ class LogContext:
         set_correlation_id(self.correlation_id)
         return self.correlation_id
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         Exit context and clear correlation ID.
 

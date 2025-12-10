@@ -30,7 +30,7 @@ Usage:
 
 import hashlib
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar, cast, override
 
 import requests
 from pydantic import BaseModel, Field
@@ -73,20 +73,21 @@ class Failure(BaseModel):
     severity: str = Field(..., description="Severity (high/medium/low)")
     framework: str = Field(..., description="Compliance framework")
     failed_at: str = Field(..., description="ISO 8601 timestamp")
-    current_state: dict[str, Any] = Field(
+    current_state: dict[str, object] = Field(
         default_factory=dict,
         description="Current resource configuration",
     )
-    required_state: dict[str, Any] = Field(
+    required_state: dict[str, object] = Field(
         default_factory=dict,
         description="Required configuration for compliance",
     )
     resource_id: str | None = Field(None, description="Vanta resource ID")
-    resource_details: dict[str, Any] = Field(
+    resource_details: dict[str, object] = Field(
         default_factory=dict,
         description="Additional resource metadata",
     )
 
+    @override
     def __str__(self) -> str:
         """Return human-readable string representation."""
         return f"Failure({self.test_name}, {self.resource_arn}, severity={self.severity})"
@@ -111,9 +112,9 @@ class VantaClient:
     """
 
     # Vanta API endpoints (based on developer.vanta.com/reference)
-    OAUTH_TOKEN_ENDPOINT = "/oauth/token"
-    TESTS_ENDPOINT = "/v1/tests"
-    RESOURCES_ENDPOINT = "/v1/resources"
+    OAUTH_TOKEN_ENDPOINT: ClassVar[str] = "/oauth/token"
+    TESTS_ENDPOINT: ClassVar[str] = "/v1/tests"
+    RESOURCES_ENDPOINT: ClassVar[str] = "/v1/resources"
 
     def __init__(
         self,
@@ -148,8 +149,8 @@ class VantaClient:
             >>> # Using direct token (legacy)
             >>> client = VantaClient(api_token="vanta_oauth_token")
         """
-        self.base_url = base_url.rstrip("/")
-        self.session = requests.Session()
+        self.base_url: str = base_url.rstrip("/")
+        self.session: requests.Session = requests.Session()
         self.session.headers.update({
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -157,8 +158,8 @@ class VantaClient:
         })
 
         # Store credentials for token refresh
-        self._client_id = client_id
-        self._client_secret = client_secret
+        self._client_id: str | None = client_id
+        self._client_secret: str | None = client_secret
 
         # Authenticate
         if api_token:
@@ -207,8 +208,8 @@ class VantaClient:
             )
             response.raise_for_status()
 
-            token_data = response.json()
-            access_token = token_data.get("access_token")
+            token_data: dict[str, Any] = response.json()
+            access_token: str | None = token_data.get("access_token")
 
             if not access_token:
                 raise VantaApiError(
@@ -295,7 +296,7 @@ class VantaClient:
             # Acquire rate limit before each request
             self._acquire_rate_limit()
 
-            params: dict[str, Any] = {
+            params: dict[str, str | int] = {
                 "status": "failing",
                 "pageSize": 50,
             }
@@ -368,20 +369,21 @@ class VantaClient:
                     retryable=True,
                 ) from e
 
-            data = response.json()
-            batch = data.get("results", {}).get("data", [])
+            data: dict[str, Any] = cast(dict[str, Any], response.json())
+            results: dict[str, Any] = cast(dict[str, Any], data.get("results", {}))
+            batch: list[dict[str, Any]] = cast(list[dict[str, Any]], results.get("data", []))
 
             # Filter by timestamp if provided
             if since:
                 batch = [
                     t for t in batch
-                    if self._parse_timestamp(t.get("failed_at", "")) > since
+                    if self._parse_timestamp(str(t.get("failed_at", ""))) > since
                 ]
 
             # Convert to Failure objects with enrichment
-            for failure_data in batch:
+            for failure_item in batch:
                 try:
-                    enriched = self._enrich_failure(failure_data)
+                    enriched = self._enrich_failure(failure_item)
                     failure = Failure(**enriched)
                     failures.append(failure)
                 except Exception as e:
@@ -390,12 +392,12 @@ class VantaClient:
                         "warning",
                         "Failed to parse failure",
                         error=str(e),
-                        failure_data=failure_data,
+                        failure_data=failure_item,
                     )
                     # Continue processing other failures
 
             # Check for more pages
-            page_info = data.get("results", {}).get("pageInfo", {})
+            page_info: dict[str, Any] = cast(dict[str, Any], results.get("pageInfo", {}))
             if not page_info.get("hasNextPage"):
                 break
 
@@ -478,22 +480,23 @@ class VantaClient:
                     timeout=30,
                 )
                 resource_response.raise_for_status()
-                resource_data = resource_response.json()
+                resource_data: dict[str, Any] = cast(dict[str, Any], resource_response.json())
 
                 failure["resource_details"] = resource_data
+                resource_id_str: str = str(resource_id)
 
                 log_with_context(
                     logger,
                     "debug",
                     "Enriched failure with resource details",
-                    resource_id=resource_id,
+                    resource_id=resource_id_str,
                 )
             except requests.HTTPError as e:
                 log_with_context(
                     logger,
                     "warning",
                     "Failed to enrich failure with resource details",
-                    resource_id=resource_id,
+                    resource_id=str(resource_id),
                     status_code=e.response.status_code if e.response else None,
                 )
                 # Continue without enrichment
@@ -502,7 +505,7 @@ class VantaClient:
                     logger,
                     "warning",
                     "Network error enriching failure",
-                    resource_id=resource_id,
+                    resource_id=str(resource_id),
                     error=str(e),
                 )
                 # Continue without enrichment
@@ -512,7 +515,7 @@ class VantaClient:
                     logger,
                     "warning",
                     "Rate limit timeout during enrichment, skipping",
-                    resource_id=resource_id,
+                    resource_id=str(resource_id),
                 )
 
         return failure

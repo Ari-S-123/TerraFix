@@ -34,7 +34,8 @@ Usage:
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Callable
+from types import TracebackType
+from typing import Callable, override
 
 from terrafix.logging_config import get_logger, log_with_context
 
@@ -55,7 +56,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
     # Class-level references to check functions (set by HealthCheckServer)
     readiness_check: Callable[[], bool] | None = None
-    status_provider: Callable[[], dict[str, Any]] | None = None
+    status_provider: Callable[[], dict[str, object]] | None = None
 
     def do_GET(self) -> None:
         """
@@ -88,7 +89,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 self._send_json_response(200, {"status": "ready"})
 
         elif self.path == "/status":
-            status: dict[str, Any] = {"status": "running"}
+            status: dict[str, object] = {"status": "running"}
             if self.status_provider is not None:
                 try:
                     additional_status = self.status_provider()
@@ -103,7 +104,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def _send_json_response(
         self,
         status_code: int,
-        body: dict[str, Any],
+        body: dict[str, object],
     ) -> None:
         """
         Send JSON response with appropriate headers.
@@ -116,9 +117,10 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
-        self.wfile.write(json.dumps(body).encode("utf-8"))
+        _ = self.wfile.write(json.dumps(body).encode("utf-8"))
 
-    def log_message(self, format: str, *args: Any) -> None:
+    @override
+    def log_message(self, format: str, *args: object) -> None:
         """
         Suppress default HTTP request logging.
 
@@ -147,7 +149,7 @@ class HealthCheckServer:
         self,
         port: int = 8080,
         readiness_check: Callable[[], bool] | None = None,
-        status_provider: Callable[[], dict[str, Any]] | None = None,
+        status_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         """
         Initialize health check server.
@@ -167,13 +169,17 @@ class HealthCheckServer:
             ... )
             >>> server.start()
         """
-        self.port = port
-        self._readiness_check = readiness_check
-        self._status_provider = status_provider
+        self.port: int = port
+        self._readiness_check: Callable[[], bool] | None = readiness_check
+        self._status_provider: Callable[[], dict[str, object]] | None = status_provider
 
         # Configure handler class with callbacks
-        HealthCheckHandler.readiness_check = readiness_check
-        HealthCheckHandler.status_provider = status_provider
+        # Note: These are stored as class attributes for access by handler instances
+        # The callables don't have 'self' since they're externally provided functions
+        # pyright does not allow assigning callables to class attributes that could
+        # be interpreted as methods, so we use setattr for dynamic assignment
+        setattr(HealthCheckHandler, "readiness_check", readiness_check)
+        setattr(HealthCheckHandler, "status_provider", status_provider)
 
         self.server: HTTPServer | None = None
         self.thread: threading.Thread | None = None
@@ -254,7 +260,12 @@ class HealthCheckServer:
         self.start()
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit - stops the server."""
         self.stop()
 

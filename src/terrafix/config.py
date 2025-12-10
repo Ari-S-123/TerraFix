@@ -32,7 +32,7 @@ Usage:
 import json
 import os
 from functools import lru_cache
-from typing import Any
+from typing import ClassVar
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
         state_retention_days: Days to retain processed failure records
     """
 
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
@@ -238,7 +238,7 @@ class Settings(BaseSettings):
 
     @field_validator("github_repo_mapping", mode="before")
     @classmethod
-    def parse_github_repo_mapping(cls, v: Any) -> dict[str, str]:
+    def parse_github_repo_mapping(cls, v: str | dict[str, str] | None) -> dict[str, str]:
         """
         Parse GitHub repo mapping from JSON string or dict.
 
@@ -255,13 +255,20 @@ class Settings(BaseSettings):
             return v
         if isinstance(v, str) and v.strip():
             try:
-                parsed = json.loads(v)
-                if not isinstance(parsed, dict):
+                parsed_value: object = json.loads(v)
+                if not isinstance(parsed_value, dict):
                     raise ConfigurationError(
                         "GITHUB_REPO_MAPPING must be a JSON object",
                         config_key="GITHUB_REPO_MAPPING",
                         reason="Parsed JSON is not a dictionary",
                     )
+                # Validated as dict, convert values to strings
+                parsed: dict[str, str] = {}
+                # parsed_value is now confirmed to be a dict, iterate items
+                for item in parsed_value.items():
+                    key_str: str = str(item[0])
+                    value_str: str = str(item[1])
+                    parsed[key_str] = value_str
                 return parsed
             except json.JSONDecodeError as e:
                 raise ConfigurationError(
@@ -344,7 +351,8 @@ def get_settings() -> Settings:
         300
     """
     try:
-        settings = Settings()
+        # Pydantic BaseSettings loads required fields from environment variables
+        settings = Settings()  # pyright: ignore[reportCallIssue]
         settings.validate_boto3_credentials()
         return settings
     except Exception as e:

@@ -22,9 +22,10 @@ Usage:
 """
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 from terrafix.errors import StateStoreError
@@ -74,7 +75,7 @@ class StateStore:
             >>> store = StateStore("./terrafix.db")
             >>> store.initialize_schema()
         """
-        self.db_path = Path(db_path)
+        self.db_path: Path = Path(db_path)
         self.conn: sqlite3.Connection | None = None
 
         log_with_context(
@@ -96,10 +97,13 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
 
-            cursor.execute("""
+            _ = cursor.execute("""
                 CREATE TABLE IF NOT EXISTS processed_failures (
                     failure_hash TEXT PRIMARY KEY,
                     test_id TEXT NOT NULL,
@@ -113,13 +117,13 @@ class StateStore:
             """)
 
             # Create index for efficient querying by status
-            cursor.execute("""
+            _ = cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_status
                 ON processed_failures(status)
             """)
 
             # Create index for cleanup queries
-            cursor.execute("""
+            _ = cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_last_processed
                 ON processed_failures(last_processed)
             """)
@@ -164,10 +168,13 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 SELECT status FROM processed_failures
                 WHERE failure_hash = ?
@@ -175,12 +182,12 @@ class StateStore:
                 (failure_hash,),
             )
 
-            row = cursor.fetchone()
+            row: tuple[str, ...] | None = cursor.fetchone()
 
             if row is None:
                 return False
 
-            status = row[0]
+            status: str = row[0]
             # Consider in_progress and completed as already processed
             already_processed = status in [
                 ProcessingStatus.IN_PROGRESS.value,
@@ -234,11 +241,14 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 INSERT OR REPLACE INTO processed_failures
                 (failure_hash, test_id, resource_arn, status, first_seen, last_processed)
@@ -298,11 +308,14 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 UPDATE processed_failures
                 SET status = ?, last_processed = ?, pr_url = ?, last_error = NULL
@@ -360,14 +373,17 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
             # Truncate error message to avoid excessively large values
             truncated_error = error[:1000] if error else "Unknown error"
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 UPDATE processed_failures
                 SET status = ?, last_processed = ?, last_error = ?
@@ -427,11 +443,14 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
-            cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+            cutoff_date = datetime.now(UTC) - timedelta(days=retention_days)
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 DELETE FROM processed_failures
                 WHERE last_processed < ?
@@ -481,20 +500,25 @@ class StateStore:
         """
         self._ensure_connection()
 
+        # At this point, self.conn is guaranteed to be non-None by _ensure_connection
+        assert self.conn is not None
+
         try:
             cursor = self.conn.cursor()
 
-            cursor.execute(
+            _ = cursor.execute(
                 """
                 SELECT status, COUNT(*) FROM processed_failures
                 GROUP BY status
                 """
             )
 
-            stats = {row[0]: row[1] for row in cursor.fetchall()}
+            all_rows: list[tuple[str, int]] = cursor.fetchall()
+            stats: dict[str, int] = {str(row[0]): int(row[1]) for row in all_rows}
 
-            cursor.execute("SELECT COUNT(*) FROM processed_failures")
-            total = cursor.fetchone()[0]
+            _ = cursor.execute("SELECT COUNT(*) FROM processed_failures")
+            total_row: tuple[int, ...] | None = cursor.fetchone()
+            total: int = total_row[0] if total_row else 0
 
             stats["total"] = total
 
@@ -543,7 +567,7 @@ class StateStore:
             )
 
             # Enable WAL mode for better concurrency
-            self.conn.execute("PRAGMA journal_mode=WAL")
+            _ = self.conn.execute("PRAGMA journal_mode=WAL")
 
             log_with_context(
                 logger,
@@ -600,7 +624,12 @@ class StateStore:
         self._ensure_connection()
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()
 

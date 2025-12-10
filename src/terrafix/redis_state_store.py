@@ -24,11 +24,13 @@ Usage:
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from types import TracebackType
+from typing import cast
 
 import redis
+from redis import Redis  # noqa: F401
 from redis.exceptions import RedisError
 
 from terrafix.errors import StateStoreError
@@ -95,7 +97,9 @@ class RedisStateStore:
             True
         """
         try:
-            self.client = redis.from_url(
+            # Redis client with decode_responses=True returns str instead of bytes
+            # Type annotation: Using Any due to redis-py complex generic typing
+            self.client: Redis = redis.from_url(  # type: ignore[type-arg]
                 redis_url,
                 decode_responses=True,
                 socket_connect_timeout=5,
@@ -103,7 +107,7 @@ class RedisStateStore:
                 retry_on_timeout=True,
             )
             # Verify connection
-            self.client.ping()
+            _ = self.client.ping()
 
             log_with_context(
                 logger,
@@ -124,8 +128,8 @@ class RedisStateStore:
                 operation="connect",
             ) from e
 
-        self.key_prefix = key_prefix
-        self.ttl_seconds = ttl_days * 24 * 60 * 60
+        self.key_prefix: str = key_prefix
+        self.ttl_seconds: int = ttl_days * 24 * 60 * 60
 
     def _sanitize_url(self, url: str) -> str:
         """
@@ -185,8 +189,8 @@ class RedisStateStore:
         key = self._make_key(failure_hash)
         record = json.dumps({
             "status": FailureStatus.IN_PROGRESS.value,
-            "claimed_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "claimed_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         })
 
         try:
@@ -240,12 +244,12 @@ class RedisStateStore:
         key = self._make_key(failure_hash)
 
         try:
-            data = self.client.get(key)
+            data: str | None = cast(str | None, self.client.get(key))
             if data is None:
                 return False
 
-            record = json.loads(data)
-            status = record.get("status")
+            record_dict: dict[str, str] = json.loads(data)
+            status: str = record_dict.get("status", "")
 
             # Consider IN_PROGRESS and COMPLETED as already processed
             # FAILED can be retried
@@ -307,12 +311,12 @@ class RedisStateStore:
             "status": FailureStatus.IN_PROGRESS.value,
             "test_id": test_id,
             "resource_arn": resource_arn,
-            "claimed_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "claimed_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         })
 
         try:
-            self.client.set(key, record, ex=self.ttl_seconds)
+            _ = self.client.set(key, record, ex=self.ttl_seconds)
 
             log_with_context(
                 logger,
@@ -361,19 +365,19 @@ class RedisStateStore:
 
         try:
             # Get existing record to preserve metadata
-            existing = self.client.get(key)
-            existing_data = json.loads(existing) if existing else {}
+            existing: str | None = cast(str | None, self.client.get(key))
+            existing_data: dict[str, str | None] = json.loads(existing) if existing else {}
 
             record = json.dumps({
                 **existing_data,
                 "status": FailureStatus.COMPLETED.value,
                 "pr_url": pr_url,
-                "completed_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
+                "completed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
                 "last_error": None,
             })
 
-            self.client.set(key, record, ex=self.ttl_seconds)
+            _ = self.client.set(key, record, ex=self.ttl_seconds)
 
             log_with_context(
                 logger,
@@ -421,8 +425,8 @@ class RedisStateStore:
 
         try:
             # Get existing record to preserve metadata
-            existing = self.client.get(key)
-            existing_data = json.loads(existing) if existing else {}
+            existing: str | None = cast(str | None, self.client.get(key))
+            existing_data: dict[str, str | None] = json.loads(existing) if existing else {}
 
             # Truncate error message to prevent excessive storage
             truncated_error = error[:1000] if error else "Unknown error"
@@ -431,11 +435,11 @@ class RedisStateStore:
                 **existing_data,
                 "status": FailureStatus.FAILED.value,
                 "last_error": truncated_error,
-                "failed_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             })
 
-            self.client.set(key, record, ex=self.ttl_seconds)
+            _ = self.client.set(key, record, ex=self.ttl_seconds)
 
             log_with_context(
                 logger,
@@ -479,12 +483,12 @@ class RedisStateStore:
         key = self._make_key(failure_hash)
 
         try:
-            data = self.client.get(key)
+            data: str | None = cast(str | None, self.client.get(key))
             if data is None:
                 return None
 
-            record = json.loads(data)
-            return FailureStatus(record["status"])
+            record_data: dict[str, str] = json.loads(data)
+            return FailureStatus(record_data["status"])
 
         except RedisError as e:
             log_with_context(
@@ -499,7 +503,7 @@ class RedisStateStore:
                 operation="get_status",
             ) from e
 
-    def get_statistics(self) -> dict[str, Any]:
+    def get_statistics(self) -> dict[str, int]:
         """
         Get aggregate statistics about processed failures.
 
@@ -521,15 +525,20 @@ class RedisStateStore:
         stats["total"] = 0
 
         try:
-            cursor = 0
+            cursor: int = 0
             while True:
-                cursor, keys = self.client.scan(cursor, match=pattern, count=100)
+                # scan() returns (cursor, [keys]) - cast for redis-py typing complexity
+                scan_result: tuple[int, list[str]] = cast(
+                    tuple[int, list[str]], self.client.scan(cursor, match=pattern, count=100)
+                )
+                cursor = scan_result[0]
+                keys: list[str] = scan_result[1]
 
                 for key in keys:
-                    data = self.client.get(key)
-                    if data:
-                        record = json.loads(data)
-                        status = record.get("status", "unknown")
+                    key_data: str | None = cast(str | None, self.client.get(key))
+                    if key_data:
+                        record_info: dict[str, str] = json.loads(key_data)
+                        status: str = record_info.get("status", "unknown")
                         if status in stats:
                             stats[status] += 1
                         stats["total"] += 1
@@ -612,7 +621,12 @@ class RedisStateStore:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()
 

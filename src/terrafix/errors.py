@@ -21,6 +21,9 @@ Retry Semantics:
     - Validation/syntax errors are generally permanent
 """
 
+from collections.abc import Mapping
+from typing import override
+
 
 class TerraFixError(Exception):
     """
@@ -35,11 +38,15 @@ class TerraFixError(Exception):
         context: Additional context dictionary for structured logging
     """
 
+    message: str
+    retryable: bool
+    context: dict[str, object]
+
     def __init__(
         self,
         message: str,
         retryable: bool = False,
-        context: dict[str, object] | None = None,
+        context: Mapping[str, object] | None = None,
     ) -> None:
         """
         Initialize TerraFix error.
@@ -52,8 +59,9 @@ class TerraFixError(Exception):
         super().__init__(message)
         self.message = message
         self.retryable = retryable
-        self.context = context or {}
+        self.context = dict(context) if context else {}
 
+    @override
     def __str__(self) -> str:
         """Return string representation of error."""
         return self.message
@@ -71,6 +79,9 @@ class VantaApiError(TerraFixError):
         response_body: Response body for debugging
     """
 
+    status_code: int | None
+    response_body: str | None
+
     def __init__(
         self,
         message: str,
@@ -87,7 +98,7 @@ class VantaApiError(TerraFixError):
             response_body: Raw response body for debugging
             retryable: Whether to retry (default True for API errors)
         """
-        context = {
+        context: Mapping[str, object] = {
             "status_code": status_code,
             "response_body": response_body[:500] if response_body else None,
         }
@@ -109,6 +120,9 @@ class TerraformParseError(TerraFixError):
         line_number: Line number where error occurred (if available)
     """
 
+    file_path: str | None
+    line_number: int | None
+
     def __init__(
         self,
         message: str,
@@ -123,7 +137,7 @@ class TerraformParseError(TerraFixError):
             file_path: Path to file that failed parsing
             line_number: Line number of parse error
         """
-        context = {
+        context: Mapping[str, object] = {
             "file_path": file_path,
             "line_number": line_number,
         }
@@ -148,6 +162,9 @@ class BedrockError(TerraFixError):
         request_id: AWS request ID for debugging
     """
 
+    error_code: str | None
+    request_id: str | None
+
     def __init__(
         self,
         message: str,
@@ -164,7 +181,7 @@ class BedrockError(TerraFixError):
             request_id: AWS request ID for support
             retryable: Whether to retry this error
         """
-        context = {
+        context: Mapping[str, object] = {
             "error_code": error_code,
             "request_id": request_id,
         }
@@ -190,6 +207,10 @@ class GitHubError(TerraFixError):
         rate_limit_reset: Unix timestamp when rate limit resets
     """
 
+    status_code: int | None
+    rate_limit_remaining: int | None
+    rate_limit_reset: int | None
+
     def __init__(
         self,
         message: str,
@@ -208,7 +229,7 @@ class GitHubError(TerraFixError):
             rate_limit_reset: Unix timestamp of rate limit reset
             retryable: Whether to retry (default True)
         """
-        context = {
+        context: Mapping[str, object] = {
             "status_code": status_code,
             "rate_limit_remaining": rate_limit_remaining,
             "rate_limit_reset": rate_limit_reset,
@@ -232,6 +253,9 @@ class StateStoreError(TerraFixError):
         sqlite_error: Original SQLite error message
     """
 
+    operation: str | None
+    sqlite_error: str | None
+
     def __init__(
         self,
         message: str,
@@ -246,7 +270,7 @@ class StateStoreError(TerraFixError):
             operation: Database operation that failed
             sqlite_error: Original SQLite error for debugging
         """
-        context = {
+        context: Mapping[str, object] = {
             "operation": operation,
             "sqlite_error": sqlite_error,
         }
@@ -269,6 +293,10 @@ class ResourceNotFoundError(TerraFixError):
         searched_files: Number of Terraform files searched
     """
 
+    resource_arn: str | None
+    resource_type: str | None
+    searched_files: int | None
+
     def __init__(
         self,
         message: str,
@@ -285,7 +313,7 @@ class ResourceNotFoundError(TerraFixError):
             resource_type: AWS resource type
             searched_files: Number of .tf files searched
         """
-        context = {
+        context: Mapping[str, object] = {
             "resource_arn": resource_arn,
             "resource_type": resource_type,
             "searched_files": searched_files,
@@ -308,6 +336,9 @@ class ConfigurationError(TerraFixError):
         reason: Specific validation failure reason
     """
 
+    config_key: str | None
+    reason: str | None
+
     def __init__(
         self,
         message: str,
@@ -322,7 +353,7 @@ class ConfigurationError(TerraFixError):
             config_key: Configuration key that failed validation
             reason: Why the configuration is invalid
         """
-        context = {
+        context: Mapping[str, object] = {
             "config_key": config_key,
             "reason": reason,
         }
@@ -344,6 +375,9 @@ class TerraformValidationError(TerraFixError):
         warnings: List of non-fatal warnings from validation
     """
 
+    validation_errors: list[str]
+    warnings: list[str]
+
     def __init__(
         self,
         message: str,
@@ -358,7 +392,7 @@ class TerraformValidationError(TerraFixError):
             validation_errors: List of specific validation failures
             warnings: List of non-fatal warnings
         """
-        context = {
+        context: Mapping[str, object] = {
             "validation_errors": validation_errors or [],
             "warnings": warnings or [],
         }

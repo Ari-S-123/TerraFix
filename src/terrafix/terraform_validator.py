@@ -33,6 +33,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from terrafix.errors import TerraformValidationError
 from terrafix.logging_config import get_logger, log_with_context
@@ -85,7 +86,7 @@ class TerraformValidator:
             >>> # or with custom path
             >>> validator = TerraformValidator("/usr/local/bin/terraform")
         """
-        self.terraform_path = terraform_path
+        self.terraform_path: str = terraform_path
         self._verify_terraform_available()
 
     def _verify_terraform_available(self) -> None:
@@ -164,7 +165,7 @@ class TerraformValidator:
 
             # Write the configuration to validate
             config_file = tmppath / filename
-            config_file.write_text(content, encoding="utf-8")
+            _ = config_file.write_text(content, encoding="utf-8")
 
             # Copy provider configuration if available
             if original_repo_path:
@@ -330,7 +331,7 @@ class TerraformValidator:
 
             # Parse JSON output
             try:
-                validation_output = json.loads(result.stdout)
+                validation_output: dict[str, Any] = json.loads(result.stdout)
             except json.JSONDecodeError:
                 # Fallback to non-JSON parsing
                 if result.returncode != 0:
@@ -340,14 +341,15 @@ class TerraformValidator:
                     )
                 return ValidationResult(is_valid=True)
 
-            is_valid = validation_output.get("valid", False)
+            is_valid: bool = validation_output.get("valid", False)
             warnings: list[str] = []
             error_messages: list[str] = []
 
-            for diagnostic in validation_output.get("diagnostics", []):
-                severity = diagnostic.get("severity", "error")
-                summary = diagnostic.get("summary", "Unknown error")
-                detail = diagnostic.get("detail", "")
+            diagnostics_list: list[dict[str, str]] = validation_output.get("diagnostics", [])
+            for diagnostic in diagnostics_list:
+                severity: str = diagnostic.get("severity", "error")
+                summary: str = diagnostic.get("summary", "Unknown error")
+                detail: str = diagnostic.get("detail", "")
 
                 message = f"{summary}: {detail}" if detail else summary
 
@@ -413,7 +415,7 @@ class TerraformValidator:
             source_file = source / filename
             if source_file.exists():
                 try:
-                    shutil.copy2(source_file, dest / filename)
+                    _ = shutil.copy2(source_file, dest / filename)
                     log_with_context(
                         logger,
                         "debug",
@@ -447,7 +449,7 @@ class TerraformValidator:
         with tempfile.TemporaryDirectory(prefix="terrafix_fmt_") as tmpdir:
             tmppath = Path(tmpdir)
             config_file = tmppath / "main.tf"
-            config_file.write_text(content, encoding="utf-8")
+            _ = config_file.write_text(content, encoding="utf-8")
 
             result = self._run_terraform_fmt(tmppath, config_file)
 

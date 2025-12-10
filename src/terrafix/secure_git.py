@@ -60,7 +60,7 @@ class SecureGitClient:
         Example:
             >>> client = SecureGitClient(github_token="ghp_...")
         """
-        self._token = github_token
+        self._token: str = github_token
 
         log_with_context(
             logger,
@@ -227,7 +227,7 @@ echo "password={self._token}"
         
         try:
             # Write script content
-            os.write(fd, script_content.encode("utf-8"))
+            _ = os.write(fd, script_content.encode("utf-8"))
         finally:
             os.close(fd)
 
@@ -249,7 +249,7 @@ echo "password={self._token}"
                 # Overwrite with zeros before deletion (defense in depth)
                 try:
                     with open(script_path, "wb") as f:
-                        f.write(b"\x00" * 1024)
+                        _ = f.write(b"\x00" * 1024)
                 except Exception:
                     pass  # Best effort overwrite
 

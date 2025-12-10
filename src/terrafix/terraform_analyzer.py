@@ -21,13 +21,13 @@ Usage:
         print(f"Found resource in {file_path}")
 """
 
-import re
 from pathlib import Path
 from typing import Any
 
-import hcl2
+import hcl2  # type: ignore[import-untyped]
+from typing import cast
 
-from terrafix.errors import ResourceNotFoundError, TerraformParseError
+from terrafix.errors import TerraformParseError
 from terrafix.logging_config import get_logger, log_with_context
 from terrafix.resource_mappings import aws_to_terraform_type
 
@@ -62,8 +62,8 @@ class TerraformAnalyzer:
             >>> analyzer = TerraformAnalyzer("/tmp/terraform-repo")
             >>> print(f"Found {len(analyzer.terraform_files)} files")
         """
-        self.repo_path = Path(repo_path)
-        self.terraform_files = list(self.repo_path.rglob("*.tf"))
+        self.repo_path: Path = Path(repo_path)
+        self.terraform_files: list[Path] = list(self.repo_path.rglob("*.tf"))
         self.parsed_configs: dict[str, dict[str, Any]] = {}
 
         log_with_context(
@@ -93,19 +93,20 @@ class TerraformAnalyzer:
                     content = f.read()
 
                 # python-hcl2 parses Terraform HCL
-                parsed = hcl2.loads(content)
+                parsed: dict[str, Any] = cast(dict[str, Any], hcl2.loads(content))
 
                 self.parsed_configs[str(tf_file)] = {
                     "content": content,
                     "parsed": parsed,
                 }
 
+                resource_list: list[dict[str, Any]] = parsed.get("resource", [])
                 log_with_context(
                     logger,
                     "debug",
                     "Parsed Terraform file",
                     file_path=str(tf_file),
-                    resource_count=len(parsed.get("resource", [])),
+                    resource_count=len(resource_list),
                 )
 
             except Exception as e:
@@ -191,17 +192,20 @@ class TerraformAnalyzer:
 
         # Search all parsed configs for matching resource
         for file_path, config in self.parsed_configs.items():
-            parsed = config["parsed"]
+            parsed_data: dict[str, Any] = cast(dict[str, Any], config["parsed"])
 
             # Look for matching resource blocks
-            if "resource" in parsed:
-                for resources in parsed["resource"]:
+            if "resource" in parsed_data:
+                resources_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_data["resource"])
+                for resources in resources_list:
                     for res_type, res_instances in resources.items():
                         if res_type == tf_type:
-                            for res_name, res_config in res_instances.items():
+                            res_instances_dict: dict[str, Any] = cast(dict[str, Any], res_instances)
+                            for res_name, res_config in res_instances_dict.items():
                                 # Match by name or by inline ARN/ID
+                                res_config_typed: dict[str, Any] = cast(dict[str, Any], res_config)
                                 if res_name == resource_name or self._resource_matches_arn(
-                                    res_config, resource_arn
+                                    res_config_typed, resource_arn
                                 ):
                                     log_with_context(
                                         logger,
@@ -211,7 +215,7 @@ class TerraformAnalyzer:
                                         resource_type=res_type,
                                         resource_name=res_name,
                                     )
-                                    return (file_path, res_config, res_name)
+                                    return (file_path, res_config_typed, res_name)
 
         log_with_context(
             logger,
@@ -243,16 +247,19 @@ class TerraformAnalyzer:
         resource_name = self._extract_name_from_arn(resource_arn)
 
         for file_path, config in self.parsed_configs.items():
-            parsed = config["parsed"]
+            parsed_data: dict[str, Any] = cast(dict[str, Any], config["parsed"])
 
-            if "resource" not in parsed:
+            if "resource" not in parsed_data:
                 continue
 
-            for resources in parsed["resource"]:
+            resources_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_data["resource"])
+            for resources in resources_list:
                 for res_type, res_instances in resources.items():
-                    for res_name, res_config in res_instances.items():
+                    res_instances_dict: dict[str, Any] = cast(dict[str, Any], res_instances)
+                    for res_name, res_config in res_instances_dict.items():
+                        res_cfg: dict[str, Any] = cast(dict[str, Any], res_config)
                         # Check if resource matches ARN
-                        if self._resource_matches_arn(res_config, resource_arn):
+                        if self._resource_matches_arn(res_cfg, resource_arn):
                             log_with_context(
                                 logger,
                                 "info",
@@ -261,7 +268,7 @@ class TerraformAnalyzer:
                                 resource_type=res_type,
                                 resource_name=res_name,
                             )
-                            return (file_path, res_config, res_name)
+                            return (file_path, res_cfg, res_name)
 
                         # Check if resource name matches
                         if res_name == resource_name:
@@ -273,7 +280,7 @@ class TerraformAnalyzer:
                                 resource_type=res_type,
                                 resource_name=res_name,
                             )
-                            return (file_path, res_config, res_name)
+                            return (file_path, res_cfg, res_name)
 
         return None
 
@@ -337,23 +344,27 @@ class TerraformAnalyzer:
         # Check for bucket name in S3 resources
         if "bucket" in resource_config:
             bucket_name = self._extract_name_from_arn(arn)
-            config_bucket = resource_config["bucket"]
+            config_bucket: str | list[str] = resource_config["bucket"]
 
             # Handle both string and list values
             if isinstance(config_bucket, list):
-                config_bucket = config_bucket[0] if config_bucket else ""
+                bucket_str: str = str(config_bucket[0]) if config_bucket else ""
+            else:
+                bucket_str = str(config_bucket)
 
-            return config_bucket == bucket_name
+            return bucket_str == bucket_name
 
         # Check for name attribute
         if "name" in resource_config:
             extracted_name = self._extract_name_from_arn(arn)
-            config_name = resource_config["name"]
+            config_name: str | list[str] = resource_config["name"]
 
             if isinstance(config_name, list):
-                config_name = config_name[0] if config_name else ""
+                name_str: str = str(config_name[0]) if config_name else ""
+            else:
+                name_str = str(config_name)
 
-            return config_name == extracted_name
+            return name_str == extracted_name
 
         return False
 
@@ -378,13 +389,19 @@ class TerraformAnalyzer:
             >>> context = analyzer.get_module_context("/path/to/s3.tf")
             >>> print(context["provider"])
         """
-        parsed = self.parsed_configs.get(file_path, {}).get("parsed", {})
+        config_entry = self.parsed_configs.get(file_path, {})
+        parsed_cfg: dict[str, Any] = cast(dict[str, Any], config_entry.get("parsed", {}))
 
-        context = {
-            "provider": parsed.get("provider", []),
-            "variable": parsed.get("variable", []),
-            "output": parsed.get("output", []),
-            "module": parsed.get("module", []),
+        provider_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("provider", []))
+        variable_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("variable", []))
+        output_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("output", []))
+        module_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("module", []))
+
+        context: dict[str, Any] = {
+            "provider": provider_list,
+            "variable": variable_list,
+            "output": output_list,
+            "module": module_list,
         }
 
         log_with_context(
@@ -392,10 +409,10 @@ class TerraformAnalyzer:
             "debug",
             "Extracted module context",
             file_path=file_path,
-            provider_count=len(context["provider"]),
-            variable_count=len(context["variable"]),
-            output_count=len(context["output"]),
-            module_count=len(context["module"]),
+            provider_count=len(provider_list),
+            variable_count=len(variable_list),
+            output_count=len(output_list),
+            module_count=len(module_list),
         )
 
         return context
@@ -423,5 +440,5 @@ class TerraformAnalyzer:
                 file_path=file_path,
             )
 
-        return config["content"]
+        return str(config["content"])
 

@@ -25,12 +25,9 @@ Usage:
     )
 """
 
-import shutil
-import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
 
 from terrafix.config import Settings
 from terrafix.errors import (
@@ -69,6 +66,12 @@ class ProcessingResult:
         error: Error message if failed
         skipped: Whether failure was skipped (duplicate)
     """
+
+    success: bool
+    failure_hash: str
+    pr_url: str | None
+    error: str | None
+    skipped: bool
 
     def __init__(
         self,
@@ -270,10 +273,10 @@ def _process_failure_with_retry(
                 raise
 
             # Calculate backoff with exponential increase and jitter
-            backoff = min(
+            backoff: float = float(min(
                 INITIAL_BACKOFF_SECONDS * (2**attempt),
                 MAX_BACKOFF_SECONDS,
-            )
+            ))
 
             log_with_context(
                 logger,
@@ -367,7 +370,7 @@ def _process_failure_once(
             path=str(repo_path),
         )
 
-        git_client.clone_repository(
+        _ = git_client.clone_repository(
             repo_full_name=repo_full_name,
             target_path=repo_path,
             branch="main",

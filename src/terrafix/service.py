@@ -16,10 +16,10 @@ import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from types import FrameType
 
-from terrafix.config import get_settings
+from terrafix.config import Settings, get_settings
 from terrafix.github_pr_creator import GitHubPRCreator
 from terrafix.health_check import HealthCheckServer
 from terrafix.logging_config import get_logger, log_with_context, setup_logging
@@ -40,7 +40,11 @@ _failures_processed = 0
 _error_count = 0
 
 
-def signal_handler(signum: int, frame: Any) -> None:
+def signal_handler(
+    signum: int,
+    frame: FrameType | None,
+) -> None:
+    _ = frame  # Signal handler receives frame but we don't use it
     """
     Handle shutdown signals (SIGTERM, SIGINT).
 
@@ -76,7 +80,7 @@ def _is_service_ready() -> bool:
     return _service_ready and not _shutdown_requested
 
 
-def _get_service_status() -> dict[str, Any]:
+def _get_service_status() -> dict[str, object]:
     """
     Get detailed service status for health check endpoint.
 
@@ -85,7 +89,7 @@ def _get_service_status() -> dict[str, Any]:
     """
     uptime_seconds = 0.0
     if _service_start_time is not None:
-        uptime_seconds = (datetime.utcnow() - _service_start_time).total_seconds()
+        uptime_seconds = (datetime.now(UTC) - _service_start_time).total_seconds()
 
     return {
         "uptime_seconds": uptime_seconds,
@@ -127,8 +131,8 @@ def main() -> int:
     )
 
     # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    _ = signal.signal(signal.SIGTERM, signal_handler)
+    _ = signal.signal(signal.SIGINT, signal_handler)
 
     # Start health check server
     health_server = HealthCheckServer(
@@ -175,7 +179,7 @@ def main() -> int:
 
         # Mark service as ready for health checks
         _service_ready = True
-        _service_start_time = datetime.utcnow()
+        _service_start_time = datetime.now(UTC)
 
     except Exception as e:
         log_with_context(
@@ -222,7 +226,7 @@ def main() -> int:
 
 
 def run_service_loop(
-    settings: Any,
+    settings: Settings,
     vanta: VantaClient,
     generator: TerraformRemediationGenerator,
     gh: GitHubPRCreator,
@@ -241,7 +245,7 @@ def run_service_loop(
         gh: GitHub PR creator
         state_store: SQLite state store
     """
-    last_check = datetime.utcnow() - timedelta(hours=1)
+    last_check = datetime.now(UTC) - timedelta(hours=1)
     cleanup_counter = 0
 
     log_with_context(
@@ -281,7 +285,7 @@ def run_service_loop(
                     generator=generator,
                     gh=gh,
                     state_store=state_store,
-                    max_workers=settings.max_concurrent_workers,
+                    max_workers=int(settings.max_concurrent_workers),
                 )
 
                 # Log summary and update global counters
@@ -305,7 +309,7 @@ def run_service_loop(
                 )
 
             # Update last_check to current time
-            last_check = datetime.utcnow()
+            last_check = datetime.now(UTC)
 
                 # Periodic statistics logging (every 10 cycles)
             # Note: Redis handles TTL-based expiration automatically
@@ -342,7 +346,7 @@ def run_service_loop(
 
         # Calculate sleep time
         cycle_duration = time.time() - cycle_start
-        sleep_time = max(0, settings.poll_interval_seconds - cycle_duration)
+        sleep_time = max(0.0, float(settings.poll_interval_seconds) - cycle_duration)
 
         if not _shutdown_requested and sleep_time > 0:
             log_with_context(
@@ -350,7 +354,7 @@ def run_service_loop(
                 "info",
                 "Sleeping until next cycle",
                 sleep_seconds=sleep_time,
-                next_cycle_at=(datetime.utcnow() + timedelta(seconds=sleep_time)).isoformat(),
+                next_cycle_at=(datetime.now(UTC) + timedelta(seconds=sleep_time)).isoformat(),
             )
 
             # Sleep in small increments to respond quickly to shutdown
@@ -368,7 +372,7 @@ def run_service_loop(
 
 def process_failures_concurrent(
     failures: list[Failure],
-    settings: Any,
+    settings: Settings,
     vanta: VantaClient,
     generator: TerraformRemediationGenerator,
     gh: GitHubPRCreator,

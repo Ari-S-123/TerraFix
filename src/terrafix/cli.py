@@ -12,12 +12,11 @@ import json
 import sys
 from pathlib import Path
 
-from terrafix.config import get_settings
+from terrafix.config import Settings, get_settings
 from terrafix.github_pr_creator import GitHubPRCreator
 from terrafix.logging_config import get_logger, log_with_context, setup_logging
 from terrafix.orchestrator import process_failure
 from terrafix.remediation_generator import TerraformRemediationGenerator
-from terrafix.state_store import StateStore
 from terrafix.vanta_client import Failure, VantaClient
 
 logger = get_logger(__name__)
@@ -41,15 +40,15 @@ def main() -> int:
         "process-once",
         help="Process a single failure from JSON file",
     )
-    process_parser.add_argument(
+    _ = process_parser.add_argument(
         "--failure-json",
         type=str,
         required=True,
         help="Path to JSON file containing Vanta failure",
     )
 
-    # stats command
-    stats_parser = subparsers.add_parser(
+    # stats command - parser not accessed directly but registered with subparsers
+    _ = subparsers.add_parser(
         "stats",
         help="Show state store statistics",
     )
@@ -59,7 +58,7 @@ def main() -> int:
         "cleanup",
         help="Cleanup old state records",
     )
-    cleanup_parser.add_argument(
+    _ = cleanup_parser.add_argument(
         "--retention-days",
         type=int,
         default=7,
@@ -68,7 +67,8 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    if not args.command:
+    command: str | None = str(args.command) if args.command else None
+    if not command:
         parser.print_help()
         return 1
 
@@ -82,31 +82,30 @@ def main() -> int:
     # Setup logging
     setup_logging(settings.log_level)
 
-    # Execute command
+    # Execute command - command is guaranteed non-None at this point
     try:
-        if args.command == "process-once":
+        if command == "process-once":
             return cmd_process_once(args, settings)
-        elif args.command == "stats":
+        if command == "stats":
             return cmd_stats(args, settings)
-        elif args.command == "cleanup":
+        if command == "cleanup":
             return cmd_cleanup(args, settings)
-        else:
-            print(f"Unknown command: {args.command}", file=sys.stderr)
-            return 1
+        print(f"Unknown command: {command}", file=sys.stderr)
+        return 1
 
     except Exception as e:
         log_with_context(
             logger,
             "error",
             "Command failed",
-            command=args.command,
+            command=command,
             error=str(e),
         )
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
 
-def cmd_process_once(args: argparse.Namespace, settings: Any) -> int:
+def cmd_process_once(args: argparse.Namespace, settings: Settings) -> int:
     """
     Process a single failure from JSON file.
 
@@ -117,17 +116,25 @@ def cmd_process_once(args: argparse.Namespace, settings: Any) -> int:
     Returns:
         Exit code
     """
+    # Import here to avoid circular imports and allow StateStore usage
+    from terrafix.redis_state_store import RedisStateStore
+
     # Load failure from JSON
-    failure_path = Path(args.failure_json)
+    failure_json_arg: str = str(args.failure_json) if args.failure_json else ""
+    if not failure_json_arg:
+        print("Invalid failure-json argument", file=sys.stderr)
+        return 1
+
+    failure_path = Path(failure_json_arg)
     if not failure_path.exists():
         print(f"File not found: {failure_path}", file=sys.stderr)
         return 1
 
     with open(failure_path, "r") as f:
-        failure_data = json.load(f)
+        failure_data: dict[str, object] = json.load(f)
 
     try:
-        failure = Failure(**failure_data)
+        failure = Failure.model_validate(failure_data)
     except Exception as e:
         print(f"Invalid failure JSON: {e}", file=sys.stderr)
         return 1
@@ -153,8 +160,10 @@ def cmd_process_once(args: argparse.Namespace, settings: Any) -> int:
 
     gh = GitHubPRCreator(github_token=settings.github_token)
 
-    state_store = StateStore(db_path=settings.sqlite_path)
-    state_store.initialize_schema()
+    state_store = RedisStateStore(
+        redis_url=settings.redis_url,
+        ttl_days=settings.state_retention_days,
+    )
 
     try:
         # Process failure
@@ -181,7 +190,11 @@ def cmd_process_once(args: argparse.Namespace, settings: Any) -> int:
         state_store.close()
 
 
-def cmd_stats(args: argparse.Namespace, settings: Any) -> int:
+def cmd_stats(
+    args: argparse.Namespace,
+    settings: Settings,
+) -> int:
+    _ = args  # Unused but part of CLI interface
     """
     Show state store statistics.
 
@@ -192,8 +205,12 @@ def cmd_stats(args: argparse.Namespace, settings: Any) -> int:
     Returns:
         Exit code
     """
-    state_store = StateStore(db_path=settings.sqlite_path)
-    state_store.initialize_schema()
+    from terrafix.redis_state_store import RedisStateStore
+
+    state_store = RedisStateStore(
+        redis_url=settings.redis_url,
+        ttl_days=settings.state_retention_days,
+    )
 
     try:
         stats = state_store.get_statistics()
@@ -211,7 +228,7 @@ def cmd_stats(args: argparse.Namespace, settings: Any) -> int:
         state_store.close()
 
 
-def cmd_cleanup(args: argparse.Namespace, settings: Any) -> int:
+def cmd_cleanup(args: argparse.Namespace, settings: Settings) -> int:
     """
     Cleanup old state records.
 
@@ -222,11 +239,17 @@ def cmd_cleanup(args: argparse.Namespace, settings: Any) -> int:
     Returns:
         Exit code
     """
-    state_store = StateStore(db_path=settings.sqlite_path)
-    state_store.initialize_schema()
+    from terrafix.redis_state_store import RedisStateStore
 
+    state_store = RedisStateStore(
+        redis_url=settings.redis_url,
+        ttl_days=settings.state_retention_days,
+    )
+
+    retention_days_raw: object = getattr(args, "retention_days", 7)
+    retention_days: int = int(str(retention_days_raw)) if retention_days_raw else 7
     try:
-        deleted = state_store.cleanup_old_records(args.retention_days)
+        deleted = state_store.cleanup_old_records(retention_days)
         print(f"Deleted {deleted} old records")
         return 0
 

@@ -81,11 +81,11 @@ class TokenBucketRateLimiter:
             ...     RateLimitConfig(requests_per_minute=50, burst_size=10)
             ... )
         """
-        self.rate = config.requests_per_minute / 60.0  # tokens per second
-        self.capacity = float(config.burst_size)
-        self.tokens = float(config.burst_size)  # Start with full bucket
-        self.last_update = time.monotonic()
-        self._lock = threading.Lock()
+        self.rate: float = config.requests_per_minute / 60.0  # tokens per second
+        self.capacity: float = float(config.burst_size)
+        self.tokens: float = float(config.burst_size)  # Start with full bucket
+        self.last_update: float = time.monotonic()
+        self._lock: threading.Lock = threading.Lock()
 
         log_with_context(
             logger,
