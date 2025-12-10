@@ -1,0 +1,4 @@
+# VCR.py cassettes directory
+# This directory contains recorded HTTP responses for replay in tests.
+# Cassettes are YAML files that capture API request/response pairs.
+

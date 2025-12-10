@@ -1,0 +1,3 @@
+# Sample Terraform repositories for parsing tests
+# This directory contains sample .tf files used by test fixtures.
+

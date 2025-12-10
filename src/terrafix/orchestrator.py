@@ -8,6 +8,9 @@ Terraform analysis, fix generation, and GitHub PR creation.
 The orchestrator implements retry logic with exponential backoff for transient
 failures and graceful error handling for permanent failures.
 
+The orchestrator is instrumented with metrics collection for observability,
+tracking per-stage timing and success/failure counts.
+
 Usage:
     from terrafix.orchestrator import process_failure
     from terrafix.config import get_settings
@@ -40,6 +43,7 @@ from terrafix.errors import (
 )
 from terrafix.github_pr_creator import GitHubPRCreator
 from terrafix.logging_config import LogContext, get_logger, log_with_context
+from terrafix.metrics import MetricNames, StageTimer, metrics_collector
 from terrafix.redis_state_store import RedisStateStore
 from terrafix.remediation_generator import TerraformRemediationGenerator
 from terrafix.secure_git import SecureGitClient
@@ -156,6 +160,7 @@ def process_failure(
                 failure_hash=failure_hash,
                 test_id=failure.test_id,
             )
+            metrics_collector.increment(MetricNames.FAILURES_SKIPPED_TOTAL)
             return ProcessingResult(
                 success=True,
                 failure_hash=failure_hash,
@@ -181,15 +186,22 @@ def process_failure(
 
         # Process the failure with retry logic
         try:
-            pr_url = _process_failure_with_retry(
-                failure=failure,
-                config=config,
-                generator=generator,
-                gh=gh,
-            )
+            # Track total processing time
+            with metrics_collector.start_timer(StageTimer.TOTAL_PROCESSING):
+                pr_url = _process_failure_with_retry(
+                    failure=failure,
+                    config=config,
+                    generator=generator,
+                    gh=gh,
+                )
 
             # Mark as successfully processed
             state_store.mark_processed(failure_hash, pr_url)
+
+            # Update metrics
+            metrics_collector.increment(MetricNames.FAILURES_PROCESSED_TOTAL)
+            metrics_collector.increment(MetricNames.FAILURES_SUCCESSFUL_TOTAL)
+            metrics_collector.increment(MetricNames.PRS_CREATED_TOTAL)
 
             log_with_context(
                 logger,
@@ -207,6 +219,10 @@ def process_failure(
 
         except Exception as e:
             error_msg = str(e)
+
+            # Update failure metrics
+            metrics_collector.increment(MetricNames.FAILURES_PROCESSED_TOTAL)
+            metrics_collector.increment(MetricNames.FAILURES_FAILED_TOTAL)
 
             log_with_context(
                 logger,
@@ -277,6 +293,9 @@ def _process_failure_with_retry(
                 INITIAL_BACKOFF_SECONDS * (2**attempt),
                 MAX_BACKOFF_SECONDS,
             ))
+
+            # Track retry metrics
+            metrics_collector.increment(MetricNames.RETRIES_TOTAL)
 
             log_with_context(
                 logger,
