@@ -128,26 +128,19 @@ class GitHubPRCreator:
         # Generate branch name
         branch_name = self._generate_branch_name(failure)
 
-        # Check if branch already exists (avoid duplicates)
-        try:
-            repo.get_branch(branch_name)
-            log_with_context(
-                logger,
-                "warning",
-                "Branch already exists, skipping PR creation",
-                branch_name=branch_name,
-            )
-            # Return None to indicate duplicate
-            return ""
-        except UnknownObjectException:
-            pass  # Branch doesn't exist, continue
-
         try:
             # Get base branch reference
             base_ref = repo.get_git_ref(f"heads/{base_branch}")
             base_sha = base_ref.object.sha
+        except GithubException as e:
+            raise GitHubError(
+                f"Failed to get base branch '{base_branch}': {e}",
+                retryable=False,
+            ) from e
 
-            # Create new branch
+        # Atomic branch creation - try to create first, handle conflict
+        # This prevents race conditions when multiple workers process similar failures
+        try:
             repo.create_git_ref(
                 ref=f"refs/heads/{branch_name}",
                 sha=base_sha,
@@ -156,12 +149,31 @@ class GitHubPRCreator:
             log_with_context(
                 logger,
                 "info",
-                "Created branch",
+                "Created branch atomically",
                 branch_name=branch_name,
                 base_sha=base_sha,
             )
 
-            # Update file on new branch
+        except GithubException as e:
+            # Check for "Reference already exists" error (HTTP 422)
+            if e.status == 422 and "Reference already exists" in str(e.data):
+                # Branch already exists - another worker handled this failure
+                log_with_context(
+                    logger,
+                    "info",
+                    "Branch already exists, skipping duplicate",
+                    branch_name=branch_name,
+                    repo=repo_full_name,
+                )
+                return ""
+            # Re-raise unexpected errors
+            raise GitHubError(
+                f"Failed to create branch: {e}",
+                retryable=True,
+            ) from e
+
+        # Branch created successfully - proceed with file update and PR
+        try:
             # Get current file to obtain its SHA
             file_content = repo.get_contents(file_path, ref=base_branch)
 
@@ -184,7 +196,16 @@ class GitHubPRCreator:
                 branch_name=branch_name,
             )
 
-            # Create Pull Request
+        except GithubException as e:
+            # Clean up the branch we created if file update fails
+            self._cleanup_branch(repo, branch_name)
+            raise GitHubError(
+                f"Failed to update file: {e}",
+                retryable=False,
+            ) from e
+
+        # Create Pull Request
+        try:
             pr_title = self._generate_pr_title(failure)
             pr_body = self._generate_pr_body(failure, fix_metadata, file_path)
 
@@ -210,6 +231,7 @@ class GitHubPRCreator:
             return pr.html_url
 
         except GithubException as e:
+            # Don't cleanup branch if PR creation fails - the branch has valid commits
             raise self._handle_github_exception(e, "create_pr") from e
 
     def _handle_github_exception(
@@ -257,6 +279,35 @@ class GitHubPRCreator:
             rate_limit_reset=int(rate_limit_reset) if rate_limit_reset else None,
             retryable=retryable,
         )
+
+    def _cleanup_branch(self, repo: Any, branch_name: str) -> None:
+        """
+        Clean up a branch that was created but failed during processing.
+
+        This is called when file update or PR creation fails after the
+        branch was successfully created.
+
+        Args:
+            repo: PyGithub Repository object
+            branch_name: Name of branch to delete
+        """
+        try:
+            ref = repo.get_git_ref(f"heads/{branch_name}")
+            ref.delete()
+            log_with_context(
+                logger,
+                "info",
+                "Cleaned up orphaned branch",
+                branch_name=branch_name,
+            )
+        except GithubException:
+            # Best effort cleanup - don't fail if cleanup fails
+            log_with_context(
+                logger,
+                "warning",
+                "Failed to cleanup orphaned branch",
+                branch_name=branch_name,
+            )
 
     def _add_labels_safe(
         self,

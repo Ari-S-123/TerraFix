@@ -330,3 +330,39 @@ class ConfigurationError(TerraFixError):
         self.config_key = config_key
         self.reason = reason
 
+
+class TerraformValidationError(TerraFixError):
+    """
+    Error validating Terraform configuration.
+
+    Raised when terraform fmt or terraform validate fails on a
+    generated fix. These are permanent errors indicating the
+    AI-generated fix is invalid.
+
+    Attributes:
+        validation_errors: List of specific validation error messages
+        warnings: List of non-fatal warnings from validation
+    """
+
+    def __init__(
+        self,
+        message: str,
+        validation_errors: list[str] | None = None,
+        warnings: list[str] | None = None,
+    ) -> None:
+        """
+        Initialize Terraform validation error.
+
+        Args:
+            message: Human-readable error description
+            validation_errors: List of specific validation failures
+            warnings: List of non-fatal warnings
+        """
+        context = {
+            "validation_errors": validation_errors or [],
+            "warnings": warnings or [],
+        }
+        super().__init__(message, retryable=False, context=context)
+        self.validation_errors = validation_errors or []
+        self.warnings = warnings or []
+

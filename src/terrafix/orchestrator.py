@@ -43,9 +43,11 @@ from terrafix.errors import (
 )
 from terrafix.github_pr_creator import GitHubPRCreator
 from terrafix.logging_config import LogContext, get_logger, log_with_context
+from terrafix.redis_state_store import RedisStateStore
 from terrafix.remediation_generator import TerraformRemediationGenerator
-from terrafix.state_store import StateStore
+from terrafix.secure_git import SecureGitClient
 from terrafix.terraform_analyzer import TerraformAnalyzer
+from terrafix.terraform_validator import TerraformValidator, ValidationResult
 from terrafix.vanta_client import Failure, VantaClient
 
 logger = get_logger(__name__)
@@ -87,7 +89,7 @@ class ProcessingResult:
 def process_failure(
     failure: Failure,
     config: Settings,
-    state_store: StateStore,
+    state_store: RedisStateStore,
     vanta: VantaClient,
     generator: TerraformRemediationGenerator,
     gh: GitHubPRCreator,
@@ -107,7 +109,7 @@ def process_failure(
     Args:
         failure: Vanta compliance failure to process
         config: Application settings
-        state_store: SQLite state store for deduplication
+        state_store: Redis state store for deduplication
         vanta: Vanta API client (unused but kept for signature)
         generator: Bedrock remediation generator
         gh: GitHub PR creator
@@ -351,19 +353,26 @@ def _process_failure_once(
         repo=repo_full_name,
     )
 
-    # Clone repository into temporary directory
+    # Clone repository into temporary directory using secure Git client
+    git_client = SecureGitClient(github_token=config.github_token)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         repo_path = Path(temp_dir) / "repo"
 
         log_with_context(
             logger,
             "info",
-            "Cloning repository",
+            "Cloning repository securely",
             repo=repo_full_name,
             path=str(repo_path),
         )
 
-        _clone_repository(repo_full_name, repo_path, config.github_token)
+        git_client.clone_repository(
+            repo_full_name=repo_full_name,
+            target_path=repo_path,
+            branch="main",
+            depth=1,
+        )
 
         # Navigate to Terraform directory if specified
         terraform_path = repo_path / config.terraform_path
@@ -440,8 +449,37 @@ def _process_failure_once(
                 retryable=False,
             )
 
-        # Optionally run terraform fmt on the fixed config
-        formatted_config = _format_terraform(fix.fixed_config)
+        # Validate the generated fix using terraform fmt and validate
+        validation_result = _validate_terraform_fix(
+            content=fix.fixed_config,
+            filename=Path(file_path).name,
+            repo_path=terraform_path,
+        )
+
+        if not validation_result.is_valid:
+            log_with_context(
+                logger,
+                "error",
+                "Generated fix failed validation",
+                error=validation_result.error_message,
+                warnings=validation_result.warnings,
+            )
+            raise TerraFixError(
+                f"Generated fix is invalid: {validation_result.error_message}",
+                retryable=False,
+            )
+
+        # Use formatted content from validator
+        formatted_config = validation_result.formatted_content or fix.fixed_config
+
+        # Log any warnings
+        for warning in validation_result.warnings:
+            log_with_context(
+                logger,
+                "warning",
+                "Terraform validation warning",
+                warning=warning,
+            )
 
         # Calculate relative file path from repo root
         relative_file_path = Path(file_path).relative_to(repo_path)
@@ -472,141 +510,46 @@ def _process_failure_once(
         return pr_url
 
 
-def _clone_repository(
-    repo_full_name: str,
-    target_path: Path,
-    github_token: str,
-) -> None:
+def _validate_terraform_fix(
+    content: str,
+    filename: str,
+    repo_path: Path,
+) -> ValidationResult:
     """
-    Clone GitHub repository using git CLI.
+    Validate and format a Terraform fix using terraform fmt and validate.
 
     Args:
-        repo_full_name: Repository (owner/repo)
-        target_path: Local path to clone into
-        github_token: GitHub token for authentication
-
-    Raises:
-        GitHubError: If clone fails
-    """
-    # Use HTTPS with token authentication
-    clone_url = f"https://x-access-token:{github_token}@github.com/{repo_full_name}.git"
-
-    try:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", clone_url, str(target_path)],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout
-        )
-
-        log_with_context(
-            logger,
-            "info",
-            "Successfully cloned repository",
-            repo=repo_full_name,
-        )
-
-    except subprocess.CalledProcessError as e:
-        log_with_context(
-            logger,
-            "error",
-            "Failed to clone repository",
-            repo=repo_full_name,
-            error=e.stderr,
-        )
-        raise GitHubError(
-            f"Failed to clone repository: {e.stderr}",
-            retryable=True,
-        ) from e
-
-    except subprocess.TimeoutExpired as e:
-        log_with_context(
-            logger,
-            "error",
-            "Repository clone timed out",
-            repo=repo_full_name,
-        )
-        raise GitHubError(
-            "Repository clone timed out",
-            retryable=True,
-        ) from e
-
-    except FileNotFoundError as e:
-        log_with_context(
-            logger,
-            "error",
-            "Git command not found",
-        )
-        raise GitHubError(
-            "Git command not found. Please install git.",
-            retryable=False,
-        ) from e
-
-
-def _format_terraform(config: str) -> str:
-    """
-    Format Terraform configuration using terraform fmt.
-
-    Args:
-        config: Terraform configuration string
+        content: Terraform configuration string
+        filename: Name of the file being fixed
+        repo_path: Path to the repository (for provider context)
 
     Returns:
-        Formatted Terraform configuration
+        ValidationResult with is_valid, formatted_content, and any errors/warnings
 
     Note:
-        If terraform is not available or formatting fails, returns
-        the original config unchanged.
+        If terraform is not available, returns a successful result with
+        the original content to allow processing to continue.
     """
     try:
-        # Write config to temporary file
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".tf",
-            delete=False,
-        ) as f:
-            f.write(config)
-            temp_path = f.name
-
-        try:
-            # Run terraform fmt
-            result = subprocess.run(
-                ["terraform", "fmt", temp_path],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            # Read formatted content
-            with open(temp_path, "r") as f:
-                formatted = f.read()
-
-            log_with_context(
-                logger,
-                "debug",
-                "Formatted Terraform configuration",
-            )
-
-            return formatted
-
-        finally:
-            # Clean up temporary file
-            Path(temp_path).unlink(missing_ok=True)
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
-        log_with_context(
-            logger,
-            "warning",
-            "Terraform fmt not available or failed, using unformatted config",
+        validator = TerraformValidator()
+        return validator.validate_configuration(
+            content=content,
+            filename=filename,
+            original_repo_path=repo_path,
         )
-        return config
 
     except Exception as e:
+        # If validator initialization fails (terraform not available),
+        # return success with original content to not block processing
         log_with_context(
             logger,
             "warning",
-            "Failed to format Terraform config",
+            "Terraform validation not available, skipping",
             error=str(e),
         )
-        return config
+        return ValidationResult(
+            is_valid=True,
+            formatted_content=content,
+            warnings=[f"Validation skipped: {e}"],
+        )
 

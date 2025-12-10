@@ -18,8 +18,9 @@ This guide provides step-by-step instructions for deploying TerraFix in producti
 
 - **Python 3.14**: TerraFix requires Python 3.14 (released November 2025)
 - **AWS Account**: With Bedrock access in us-west-2
-- **Vanta Account**: OAuth token with `test:read` scope
+- **Vanta Account**: OAuth token with `vanta-api.all:read` scope
 - **GitHub Account**: Personal access token with `repo` scope
+- **Redis**: Production-ready Redis endpoint (Terraform deploys ElastiCache)
 - **Git**: For repository cloning operations
 - **Terraform CLI**: For infrastructure provisioning (optional for local dev)
 
@@ -59,20 +60,21 @@ Create `.env` file:
 
 ```bash
 # Required
-VANTA_API_TOKEN=vanta_oauth_token_here
+VANTA_API_TOKEN=vanta_oauth_token_here   # scope: vanta-api.all:read
 GITHUB_TOKEN=ghp_github_token_here
 AWS_REGION=us-west-2
 AWS_ACCESS_KEY_ID=your_aws_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret
+REDIS_URL=redis://localhost:6379/0   # For local/dev; Terraform provides in ECS
 
 # Optional
 BEDROCK_MODEL_ID=anthropic.claude-sonnet-4-5-v2:0
 POLL_INTERVAL_SECONDS=300
-SQLITE_PATH=./terrafix.db
 GITHUB_REPO_MAPPING={"default": "your-org/terraform-repo"}
 TERRAFORM_PATH=terraform
 MAX_CONCURRENT_WORKERS=3
 LOG_LEVEL=INFO
+STATE_RETENTION_DAYS=7
 ```
 
 ### 5. Run Locally
@@ -166,22 +168,27 @@ environment = "prod"
 
 # Credentials (sensitive - use secure method to provide these)
 vanta_api_token = "vanta_oauth_token"
-github_token = "ghp_github_token"
+github_token   = "ghp_github_token"
 
 # Networking (replace with your VPC details)
-vpc_id = "vpc-xxxxx"
+vpc_id     = "vpc-xxxxx"
 subnet_ids = ["subnet-xxxxx", "subnet-yyyyy"]
 
 # Application Configuration
 github_repo_mapping = jsonencode({
   default = "your-org/terraform-repo"
 })
-terraform_path = "terraform"
-poll_interval_seconds = 300
+terraform_path         = "terraform"
+poll_interval_seconds  = 300
+state_retention_days   = 7
+
+# Redis / ElastiCache
+redis_node_type                = "cache.t3.micro"
+redis_snapshot_retention_days  = 1
 
 # Resource Sizing
-cpu = 2048    # 2 vCPU
-memory = 4096 # 4 GB
+cpu    = 2048    # 2 vCPU
+memory = 4096    # 4 GB
 
 # Monitoring
 log_retention_days = 30
@@ -222,14 +229,14 @@ All configuration is via environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VANTA_API_TOKEN` | Yes | - | Vanta OAuth token |
+| `VANTA_API_TOKEN` | Yes | - | Vanta OAuth token (`vanta-api.all:read`) |
 | `GITHUB_TOKEN` | Yes | - | GitHub PAT with repo scope |
 | `AWS_REGION` | Yes | - | AWS region for Bedrock |
 | `AWS_ACCESS_KEY_ID` | Yes | - | AWS credentials |
 | `AWS_SECRET_ACCESS_KEY` | Yes | - | AWS credentials |
 | `BEDROCK_MODEL_ID` | No | `anthropic.claude-sonnet-4-5-v2:0` | Claude model ID |
 | `POLL_INTERVAL_SECONDS` | No | `300` | Vanta polling interval |
-| `SQLITE_PATH` | No | `./terrafix.db` | SQLite database path |
+| `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection URL (Terraform sets in ECS) |
 | `GITHUB_REPO_MAPPING` | No | `{"default": ""}` | Resource to repo mapping |
 | `TERRAFORM_PATH` | No | `.` | Path to .tf files in repos |
 | `MAX_CONCURRENT_WORKERS` | No | `3` | Max parallel processing |
@@ -371,12 +378,15 @@ aws logs tail /ecs/terrafix-prod | grep "BedrockError"
 
 **Symptoms**: Multiple PRs for same failure
 
-**Expected Behavior**: SQLite state is ephemeral in ECS. After task restarts, previous state is lost.
+**Expected Behavior**: With Redis state store, duplicates should be rare. If seen:
+
+**Diagnosis**:
+- Check Redis connectivity (ECS task to ElastiCache security group)
+- Verify deduplication hash inputs (test_id/resource_arn)
 
 **Solutions**:
-- Accept as temporary limitation
-- Implement EFS volume for persistent state (see `terraform/README.md`)
-- Manually close duplicate PRs
+- Ensure `REDIS_URL` is set correctly in task definition
+- Confirm ElastiCache is reachable from ECS task subnets/security groups
 
 ### GitHub Rate Limiting
 

@@ -29,6 +29,7 @@ import hcl2
 
 from terrafix.errors import ResourceNotFoundError, TerraformParseError
 from terrafix.logging_config import get_logger, log_with_context
+from terrafix.resource_mappings import aws_to_terraform_type
 
 logger = get_logger(__name__)
 
@@ -163,8 +164,8 @@ class TerraformAnalyzer:
             resource_type=resource_type,
         )
 
-        # Map AWS resource type to Terraform type
-        tf_type = self._aws_to_terraform_type(resource_type)
+        # Map AWS resource type to Terraform type using comprehensive mapping
+        tf_type = aws_to_terraform_type(resource_type)
 
         # Extract resource name from ARN
         resource_name = self._extract_name_from_arn(resource_arn)
@@ -178,7 +179,17 @@ class TerraformAnalyzer:
             extracted_name=resource_name,
         )
 
-        # Search all parsed configs
+        # If mapping is unknown, try fuzzy matching by ARN
+        if tf_type is None:
+            log_with_context(
+                logger,
+                "warning",
+                "Unknown AWS resource type, attempting fuzzy match",
+                aws_type=resource_type,
+            )
+            return self._fuzzy_find_by_arn(resource_arn)
+
+        # Search all parsed configs for matching resource
         for file_path, config in self.parsed_configs.items():
             parsed = config["parsed"]
 
@@ -213,28 +224,58 @@ class TerraformAnalyzer:
 
         return None
 
-    def _aws_to_terraform_type(self, aws_type: str) -> str:
+    def _fuzzy_find_by_arn(
+        self,
+        resource_arn: str,
+    ) -> tuple[str, dict[str, Any], str] | None:
         """
-        Convert AWS CloudFormation type to Terraform type.
+        Attempt to find resource by ARN without knowing the Terraform type.
 
-        Maps AWS resource types (AWS::Service::Resource) to Terraform
-        resource types (aws_service_resource).
+        Searches all resources for ARN or identifier matches. This is a
+        fallback for resource types not in the mapping table.
 
         Args:
-            aws_type: CloudFormation resource type
+            resource_arn: AWS resource ARN
 
         Returns:
-            Terraform resource type
-
-        Examples:
-            >>> analyzer._aws_to_terraform_type("AWS::S3::Bucket")
-            "aws_s3_bucket"
-            >>> analyzer._aws_to_terraform_type("AWS::IAM::Role")
-            "aws_iam_role"
+            Tuple of (file_path, resource_block, resource_name) or None
         """
-        # Remove AWS:: prefix and convert to lowercase snake_case
-        parts = aws_type.replace("AWS::", "").split("::")
-        return "aws_" + "_".join(p.lower() for p in parts)
+        resource_name = self._extract_name_from_arn(resource_arn)
+
+        for file_path, config in self.parsed_configs.items():
+            parsed = config["parsed"]
+
+            if "resource" not in parsed:
+                continue
+
+            for resources in parsed["resource"]:
+                for res_type, res_instances in resources.items():
+                    for res_name, res_config in res_instances.items():
+                        # Check if resource matches ARN
+                        if self._resource_matches_arn(res_config, resource_arn):
+                            log_with_context(
+                                logger,
+                                "info",
+                                "Found resource via fuzzy match",
+                                file_path=file_path,
+                                resource_type=res_type,
+                                resource_name=res_name,
+                            )
+                            return (file_path, res_config, res_name)
+
+                        # Check if resource name matches
+                        if res_name == resource_name:
+                            log_with_context(
+                                logger,
+                                "info",
+                                "Found resource by name match",
+                                file_path=file_path,
+                                resource_type=res_type,
+                                resource_name=res_name,
+                            )
+                            return (file_path, res_config, res_name)
+
+        return None
 
     def _extract_name_from_arn(self, arn: str) -> str:
         """

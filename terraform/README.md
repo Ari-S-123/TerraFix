@@ -12,44 +12,18 @@ Terraform configuration for deploying TerraFix as an ECS/Fargate service.
 ## Architecture
 
 - **ECS Cluster**: Fargate cluster for container orchestration
-- **ECS Service**: Single-task service (for SQLite simplicity)
+- **ECS Service**: Single-task service with health checks
 - **Task Definition**: 2 vCPU, 4GB memory
 - **ECR Repository**: Private Docker registry for TerraFix image
 - **Secrets Manager**: Secure storage for Vanta and GitHub tokens
 - **CloudWatch Logs**: Structured JSON logs with 30-day retention
 - **IAM Roles**: Least-privilege access to Bedrock and logs
-- **Security Group**: Outbound-only (for API calls)
+- **ElastiCache Redis**: Persistent state store for deduplication
+- **Security Group**: Outbound-only (for API calls + Redis ingress from ECS)
 
-## SQLite State Limitations
+## Redis State Store
 
-**Important**: SQLite database is stored in `/tmp/terrafix.db` within the container, making state **ephemeral per task**. When the ECS task restarts (for updates, crashes, or scaling), all processed failure records are lost.
-
-### Implications
-
-- Duplicate PR creation is possible after task restarts
-- Processing history is not preserved across deployments
-- Statistics are reset on each task start
-
-### Future Enhancement
-
-To persist state across task restarts, mount an EFS volume:
-
-```hcl
-resource "aws_efs_file_system" "terrafix_state" {
-  # ... EFS configuration ...
-}
-
-# Add to task definition:
-volume {
-  name = "terrafix-state"
-  efs_volume_configuration {
-    file_system_id = aws_efs_file_system.terrafix_state.id
-    root_directory = "/"
-  }
-}
-
-# Update SQLITE_PATH to /mnt/efs/terrafix.db
-```
+State is persisted in Redis (ElastiCache) to survive ECS task restarts and allow safe deduplication. The task definition injects `REDIS_URL`, and the security group allows ECS tasks to reach Redis on port 6379 only.
 
 ## Deployment
 
@@ -131,7 +105,7 @@ Configured in `ecs.tf` task definition:
 - `AWS_REGION`: us-west-2
 - `BEDROCK_MODEL_ID`: anthropic.claude-sonnet-4-5-v2:0
 - `POLL_INTERVAL_SECONDS`: 300 (5 minutes)
-- `SQLITE_PATH`: /tmp/terrafix.db (ephemeral)
+- `REDIS_URL`: redis://<elasticache-endpoint>:6379/0
 - `LOG_LEVEL`: INFO
 - `GITHUB_REPO_MAPPING`: JSON mapping
 - `TERRAFORM_PATH`: Path to .tf files in repos
@@ -151,7 +125,7 @@ memory = 4096 # In MB
 
 ### Monitoring
 
-CloudWatch alarm triggers when task count < 1:
+CloudWatch alarm triggers when task count < 1; container health check hits `http://localhost:8080/health`.
 
 - Evaluation: 2 periods of 5 minutes
 - Action: (Configure SNS topic for notifications)
@@ -217,12 +191,13 @@ aws logs start-query \
 
 **Monthly Cost (us-west-2):**
 - Fargate (2 vCPU, 4GB, 24/7): ~$60
+- ElastiCache Redis (cache.t3.micro, single node): ~$15
 - CloudWatch Logs (10 GB/month): ~$5
 - Bedrock (Claude Sonnet 4.5): Variable (per-token pricing)
 - Secrets Manager (2 secrets): ~$1
 - ECR storage (< 10 images): ~$0.10
 
-**Total**: ~$66/month + Bedrock usage
+**Total**: ~$81/month + Bedrock usage
 
 ## Cleanup
 

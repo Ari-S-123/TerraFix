@@ -11,7 +11,9 @@ All components specified in the plan have been successfully implemented.
 ```
 Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
                        ↓
-                SQLite State Store
+                 Redis State Store
+                       ↓
+             Health Check (/health,/ready,/status)
 ```
 
 ## Components Implemented
@@ -53,26 +55,34 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 ### 5. Vanta Integration ✅
 - **Location**: `src/terrafix/vanta_client.py`
 - **Features**:
-  - OAuth authentication with Vanta API
+  - OAuth authentication with Vanta API (`vanta-api.all:read`)
+  - Token-bucket rate limiting (management 50 rpm, integration 20 rpm)
   - Pagination for large result sets
   - Failure enrichment with resource details
   - `Failure` Pydantic model for type safety
-  - SHA256 hashing for deduplication
+  - SHA256 hashing for deduplication (timestamp excluded)
   - `get_failing_tests_since()` for polling
-  - Robust error handling with retries
+  - Robust error handling with retries and re-auth on 401
 
-### 6. Terraform Analysis ✅
+### 6. Rate Limiter ✅
+- **Location**: `src/terrafix/rate_limiter.py`
+- **Features**:
+  - Token bucket implementation with burst control
+  - Shared limiters for Vanta management and integration endpoints
+  - Thread-safe acquire/try_acquire with timeout
+
+### 7. Terraform Analysis ✅
 - **Location**: `src/terrafix/terraform_analyzer.py`
 - **Features**:
   - HCL parsing with python-hcl2
   - Recursive .tf file discovery
   - Resource matching by AWS ARN
-  - AWS type to Terraform type mapping
+  - Comprehensive AWS→Terraform type mapping (`resource_mappings.py`)
   - Module context extraction (providers, variables, outputs)
   - Graceful handling of parse errors
   - ARN extraction patterns for S3, IAM, etc.
 
-### 7. Bedrock Remediation Generator ✅
+### 8. Bedrock Remediation Generator ✅
 - **Location**: `src/terrafix/remediation_generator.py`
 - **Features**:
   - Claude Sonnet 4.5 via AWS Bedrock
@@ -84,11 +94,11 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - Prompt truncation for large configs
   - Confidence scoring (high/medium/low)
 
-### 8. GitHub PR Creator ✅
+### 9. GitHub PR Creator ✅
 - **Location**: `src/terrafix/github_pr_creator.py`
 - **Features**:
   - PyGithub integration
-  - Branch creation with unique names
+  - Atomic branch creation (handles race conditions)
   - File updates via GitHub API
   - Rich PR descriptions with review checklists
   - Conventional commit messages
@@ -96,45 +106,57 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - Rate limit handling
   - Duplicate detection (existing branches)
 
-### 9. SQLite State Store ✅
-- **Location**: `src/terrafix/state_store.py`
+### 10. Redis State Store ✅
+- **Location**: `src/terrafix/redis_state_store.py`
 - **Features**:
-  - Schema with processed_failures table
+  - Atomic `SET NX` deduplication with TTL
   - Status tracking (pending/in_progress/completed/failed)
-  - Deduplication via failure hash
-  - Automatic cleanup of old records
-  - Statistics API for monitoring
-  - WAL mode for better concurrency
-  - Context manager support
-  - Thread-safe operations
+  - Retry-safe operations with connection pooling
+  - Statistics API via SCAN
+  - Backed by ElastiCache Redis in Terraform
 
-### 10. Orchestration Pipeline ✅
+### 11. Secure Git Client ✅
+- **Location**: `src/terrafix/secure_git.py`
+- **Features**:
+  - GIT_ASKPASS credential helper (no tokens in process args)
+  - Sanitized error output to avoid credential leakage
+  - Timeout handling and cleanup of temp scripts
+
+### 12. Terraform Validator ✅
+- **Location**: `src/terrafix/terraform_validator.py`
+- **Features**:
+  - Runs `terraform fmt` and `terraform validate`
+  - Copies provider context files when available
+  - Returns warnings when init fails instead of hard failing
+  - Graceful fallback if terraform binary is unavailable
+
+### 13. Orchestration Pipeline ✅
 - **Location**: `src/terrafix/orchestrator.py`
 - **Features**:
   - End-to-end failure processing
-  - Deduplication checks
-  - Git repository cloning
+  - Deduplication checks (Redis)
+  - Secure Git repository cloning
   - Terraform analysis coordination
   - Bedrock fix generation
-  - Optional terraform fmt validation
+  - Terraform validation with warning propagation
   - GitHub PR creation
   - State tracking
   - Retry logic with exponential backoff
   - Correlation ID propagation
   - Comprehensive error handling
 
-### 11. Service Loop ✅
+### 14. Service Loop ✅
 - **Location**: `src/terrafix/service.py`
 - **Features**:
   - Long-running worker loop
   - Vanta polling every 5 minutes (configurable)
   - Concurrent failure processing (ThreadPoolExecutor)
   - Graceful shutdown on SIGTERM/SIGINT
-  - Periodic state cleanup
+  - Health check server on port 8080 (`/health`, `/ready`, `/status`)
   - Statistics logging
   - Error recovery without crash
 
-### 12. CLI Interface ✅
+### 15. CLI Interface ✅
 - **Location**: `src/terrafix/cli.py`
 - **Features**:
   - `process-once`: Process single failure from JSON
@@ -143,7 +165,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - Structured output
   - Error handling
 
-### 13. Docker Deployment ✅
+### 16. Docker Deployment ✅
 - **Location**: `Dockerfile`, `.dockerignore`
 - **Features**:
   - Python 3.14 slim base image
@@ -152,7 +174,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - Optimized layer caching
   - Production-ready entrypoint
 
-### 14. Terraform Infrastructure ✅
+### 17. Terraform Infrastructure ✅
 - **Location**: `terraform/`
 - **Components**:
   - `main.tf`: Provider configuration
@@ -160,13 +182,14 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - `ecr.tf`: ECR repository with lifecycle policy
   - `secrets.tf`: Secrets Manager for tokens
   - `iam.tf`: Task and execution roles (least-privilege)
-  - `ecs.tf`: Fargate service and task definition
+  - `ecs.tf`: Fargate service and task definition (health checks, Redis env)
+  - `elasticache.tf`: Redis (ElastiCache) for state store
   - `cloudwatch.tf`: Log group and alarms
   - `networking.tf`: VPC/subnet variables
   - `outputs.tf`: Resource outputs
   - `README.md`: Deployment guide
 
-### 15. Documentation ✅
+### 18. Documentation ✅
 - **Files Created**:
   - `README.md`: Main project documentation
   - `DEPLOYMENT_GUIDE.md`: Step-by-step deployment
@@ -177,16 +200,15 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 
 ## Key Design Decisions
 
-### 1. SQLite for State (with Limitations)
-- **Decision**: Use SQLite instead of Redis for simplicity
-- **Trade-off**: Ephemeral state in ECS (lost on task restart)
-- **Rationale**: Simplifies deployment, acceptable for MVP
-- **Future**: Add EFS mount for persistence
+### 1. Redis for State
+- **Decision**: Use Redis/ElastiCache for durable, atomic deduplication
+- **Benefit**: Survives task restarts; safe for concurrent workers
+- **Trade-off**: Requires managed Redis and networking access
 
 ### 2. Single-Task ECS Deployment
 - **Decision**: Run single Fargate task
-- **Rationale**: Avoids SQLite concurrency issues
-- **Trade-off**: No high availability
+- **Rationale**: Simplicity; Redis enables future scale-out if needed
+- **Trade-off**: No HA by default (can scale out later)
 - **Acceptable**: Compliance workflows not time-critical
 
 ### 3. Polling vs. Webhooks
@@ -195,16 +217,16 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 - **Trade-off**: 5-minute delay for failure detection
 - **Acceptable**: Compliance is not real-time critical
 
-### 4. Git CLI for Cloning
-- **Decision**: Use subprocess with git CLI
-- **Rationale**: Simple, reliable, handles authentication
+### 4. Secure Git via CLI
+- **Decision**: Use subprocess with git CLI and GIT_ASKPASS helper
+- **Rationale**: Simple, reliable, avoids token leakage
 - **Trade-off**: Requires git in container
 - **Alternative**: Could use GitPython library
 
-### 5. Terraform Fmt Optional
-- **Decision**: Run terraform fmt if available, fallback gracefully
-- **Rationale**: Formatting is nice-to-have, not critical
-- **Trade-off**: Some PRs may have inconsistent formatting
+### 5. Terraform Validation with Fallback
+- **Decision**: Run terraform fmt + validate; fallback to pass-through if terraform unavailable
+- **Rationale**: Catch invalid fixes early; avoid blocking when binary missing
+- **Trade-off**: Validation skipped when terraform not present
 
 ## Testing Strategy (Not Yet Implemented)
 
@@ -248,7 +270,11 @@ terrafix/
 │   ├── terraform_analyzer.py   # Terraform parsing
 │   ├── remediation_generator.py # Bedrock integration
 │   ├── github_pr_creator.py    # GitHub PR creation
-│   ├── state_store.py          # SQLite state management
+│   ├── redis_state_store.py    # Redis state management
+│   ├── rate_limiter.py         # Token bucket rate limiter
+│   ├── secure_git.py           # Secure git operations
+│   ├── terraform_validator.py  # terraform fmt/validate helper
+│   ├── health_check.py         # HTTP health endpoints
 │   ├── orchestrator.py         # Main processing pipeline
 │   ├── service.py              # Long-running worker
 │   ├── cli.py                  # CLI interface
@@ -297,11 +323,11 @@ To use TerraFix:
 
 ## Known Limitations
 
-1. **Ephemeral State**: SQLite state lost on ECS task restart
-2. **Single Repository**: Currently maps one resource pattern to one repo
-3. **No Automated Tests**: Testing framework not implemented
-4. **No Webhooks**: Polling-based (5-minute intervals)
-5. **Limited Resource Types**: Terraform docs for S3, IAM, EC2, RDS only
+1. **Single Repository Mapping**: Currently maps one resource pattern to one repo
+2. **No Automated Tests**: Testing framework not implemented
+3. **No Webhooks**: Polling-based (5-minute intervals)
+4. **Terraform Binary Dependency**: Validation falls back if terraform is unavailable
+5. **Limited Resource Types**: Fix generation examples still focused on common AWS services
 6. **No Cost Analysis**: Infracost integration not implemented
 7. **No Terraform Plan Validation**: Doesn't run `terraform plan` before PR
 

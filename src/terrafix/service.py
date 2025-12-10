@@ -21,16 +21,23 @@ from typing import Any
 
 from terrafix.config import get_settings
 from terrafix.github_pr_creator import GitHubPRCreator
+from terrafix.health_check import HealthCheckServer
 from terrafix.logging_config import get_logger, log_with_context, setup_logging
 from terrafix.orchestrator import ProcessingResult, process_failure
+from terrafix.redis_state_store import RedisStateStore
 from terrafix.remediation_generator import TerraformRemediationGenerator
-from terrafix.state_store import StateStore
 from terrafix.vanta_client import Failure, VantaClient
 
 logger = get_logger(__name__)
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
+
+# Global service state for health checks
+_service_ready = False
+_service_start_time: datetime | None = None
+_failures_processed = 0
+_error_count = 0
 
 
 def signal_handler(signum: int, frame: Any) -> None:
@@ -44,7 +51,7 @@ def signal_handler(signum: int, frame: Any) -> None:
         signum: Signal number
         frame: Current stack frame
     """
-    global _shutdown_requested
+    global _shutdown_requested, _service_ready
 
     log_with_context(
         logger,
@@ -54,18 +61,52 @@ def signal_handler(signum: int, frame: Any) -> None:
     )
 
     _shutdown_requested = True
+    _service_ready = False
+
+
+def _is_service_ready() -> bool:
+    """
+    Check if service is ready to process failures.
+
+    Used by the health check server for readiness probes.
+
+    Returns:
+        True if service is initialized and not shutting down
+    """
+    return _service_ready and not _shutdown_requested
+
+
+def _get_service_status() -> dict[str, Any]:
+    """
+    Get detailed service status for health check endpoint.
+
+    Returns:
+        Dictionary with service statistics
+    """
+    uptime_seconds = 0.0
+    if _service_start_time is not None:
+        uptime_seconds = (datetime.utcnow() - _service_start_time).total_seconds()
+
+    return {
+        "uptime_seconds": uptime_seconds,
+        "failures_processed": _failures_processed,
+        "errors": _error_count,
+        "shutting_down": _shutdown_requested,
+    }
 
 
 def main() -> int:
     """
     Main service entry point.
 
-    Initializes all clients, sets up signal handlers, and runs the
-    main polling loop until shutdown is requested.
+    Initializes all clients, sets up signal handlers, starts the health
+    check server, and runs the main polling loop until shutdown is requested.
 
     Returns:
         Exit code (0 for success, 1 for error)
     """
+    global _service_ready, _service_start_time
+
     # Load configuration
     try:
         settings = get_settings()
@@ -89,6 +130,24 @@ def main() -> int:
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Start health check server
+    health_server = HealthCheckServer(
+        port=8080,
+        readiness_check=_is_service_ready,
+        status_provider=_get_service_status,
+    )
+
+    try:
+        health_server.start()
+    except Exception as e:
+        log_with_context(
+            logger,
+            "error",
+            "Failed to start health check server",
+            error=str(e),
+        )
+        return 1
+
     # Initialize clients
     try:
         vanta = VantaClient(
@@ -103,14 +162,20 @@ def main() -> int:
 
         gh = GitHubPRCreator(github_token=settings.github_token)
 
-        state_store = StateStore(db_path=settings.sqlite_path)
-        state_store.initialize_schema()
+        state_store = RedisStateStore(
+            redis_url=settings.redis_url,
+            ttl_days=settings.state_retention_days,
+        )
 
         log_with_context(
             logger,
             "info",
             "Initialized all clients",
         )
+
+        # Mark service as ready for health checks
+        _service_ready = True
+        _service_start_time = datetime.utcnow()
 
     except Exception as e:
         log_with_context(
@@ -119,6 +184,7 @@ def main() -> int:
             "Failed to initialize clients",
             error=str(e),
         )
+        health_server.stop()
         return 1
 
     # Run main service loop
@@ -142,6 +208,8 @@ def main() -> int:
 
     finally:
         # Cleanup
+        _service_ready = False
+        health_server.stop()
         state_store.close()
 
         log_with_context(
@@ -158,7 +226,7 @@ def run_service_loop(
     vanta: VantaClient,
     generator: TerraformRemediationGenerator,
     gh: GitHubPRCreator,
-    state_store: StateStore,
+    state_store: RedisStateStore,
 ) -> None:
     """
     Run the main service polling loop.
@@ -216,10 +284,15 @@ def run_service_loop(
                     max_workers=settings.max_concurrent_workers,
                 )
 
-                # Log summary
+                # Log summary and update global counters
                 successful = sum(1 for r in results if r.success and not r.skipped)
                 skipped = sum(1 for r in results if r.skipped)
                 failed = sum(1 for r in results if not r.success)
+
+                # Update global counters for health check status
+                global _failures_processed, _error_count
+                _failures_processed += successful
+                _error_count += failed
 
                 log_with_context(
                     logger,
@@ -234,26 +307,10 @@ def run_service_loop(
             # Update last_check to current time
             last_check = datetime.utcnow()
 
-            # Periodic cleanup (every 10 cycles)
+                # Periodic statistics logging (every 10 cycles)
+            # Note: Redis handles TTL-based expiration automatically
             cleanup_counter += 1
             if cleanup_counter >= 10:
-                try:
-                    deleted = state_store.cleanup_old_records(
-                        settings.state_retention_days
-                    )
-                    log_with_context(
-                        logger,
-                        "info",
-                        "Cleaned up old state records",
-                        deleted_count=deleted,
-                    )
-                except Exception as e:
-                    log_with_context(
-                        logger,
-                        "warning",
-                        "Failed to cleanup old records",
-                        error=str(e),
-                    )
                 cleanup_counter = 0
 
                 # Log statistics
@@ -315,7 +372,7 @@ def process_failures_concurrent(
     vanta: VantaClient,
     generator: TerraformRemediationGenerator,
     gh: GitHubPRCreator,
-    state_store: StateStore,
+    state_store: RedisStateStore,
     max_workers: int = 3,
 ) -> list[ProcessingResult]:
     """

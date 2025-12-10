@@ -2,17 +2,26 @@
 Vanta API client for polling compliance test failures.
 
 This module provides a client for interacting with Vanta's REST API to
-detect compliance test failures. The client handles pagination, enrichment,
-and deduplication hashing.
+detect compliance test failures. The client handles OAuth authentication,
+pagination, rate limiting, and deduplication hashing.
 
-The VantaClient polls Vanta's API for failing tests without requiring any
-AWS access. It only needs read-only access to Vanta's test results.
+API Reference: https://developer.vanta.com/reference
+
+OAuth Scopes:
+    - vanta-api.all:read: Required for reading compliance data
+
+Rate Limits (per Vanta documentation):
+    - Management endpoints: 50 requests/minute
+    - Integration endpoints: 20 requests/minute
 
 Usage:
     from terrafix.vanta_client import VantaClient, Failure
 
-    client = VantaClient(api_token="vanta_oauth_token")
-    failures = client.get_failing_tests(frameworks=["SOC2", "ISO27001"])
+    client = VantaClient(
+        client_id="your_client_id",
+        client_secret="your_client_secret"
+    )
+    failures = client.get_failing_tests()
 
     for failure in failures:
         failure_hash = client.generate_failure_hash(failure)
@@ -28,6 +37,7 @@ from pydantic import BaseModel, Field
 
 from terrafix.errors import VantaApiError
 from terrafix.logging_config import get_logger, log_with_context
+from terrafix.rate_limiter import VANTA_MANAGEMENT_LIMITER
 
 logger = get_logger(__name__)
 
@@ -86,44 +96,163 @@ class VantaClient:
     """
     Client for interacting with Vanta's compliance API.
 
-    The client handles authentication, pagination, enrichment, and error
-    handling for the Vanta API. It maintains a persistent HTTP session
-    for connection pooling.
+    The client handles OAuth 2.0 authentication using client credentials,
+    pagination, rate limiting, and error handling. It maintains a persistent
+    HTTP session for connection pooling.
+
+    Authentication Flow:
+        1. Exchange client_id and client_secret for access token
+        2. Use Bearer token for all subsequent API requests
+        3. Token refresh is handled automatically on 401 responses
 
     Attributes:
-        api_token: OAuth token for Vanta API authentication
         base_url: Vanta API base URL (https://api.vanta.com)
         session: Persistent HTTP session for connection pooling
     """
 
-    def __init__(self, api_token: str, base_url: str = "https://api.vanta.com") -> None:
+    # Vanta API endpoints (based on developer.vanta.com/reference)
+    OAUTH_TOKEN_ENDPOINT = "/oauth/token"
+    TESTS_ENDPOINT = "/v1/tests"
+    RESOURCES_ENDPOINT = "/v1/resources"
+
+    def __init__(
+        self,
+        api_token: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        base_url: str = "https://api.vanta.com",
+    ) -> None:
         """
         Initialize Vanta API client.
 
+        Supports two authentication modes:
+        1. Direct API token (for backwards compatibility)
+        2. OAuth client credentials flow (recommended)
+
         Args:
-            api_token: Vanta OAuth token with test:read scope
+            api_token: Pre-authenticated API token (legacy mode)
+            client_id: OAuth client ID from Vanta Developer Console
+            client_secret: OAuth client secret
             base_url: Vanta API base URL (default: https://api.vanta.com)
 
+        Raises:
+            VantaApiError: If authentication fails
+
         Example:
+            >>> # Using OAuth (recommended)
+            >>> client = VantaClient(
+            ...     client_id="your_client_id",
+            ...     client_secret="your_client_secret"
+            ... )
+            >>> 
+            >>> # Using direct token (legacy)
             >>> client = VantaClient(api_token="vanta_oauth_token")
         """
-        self.api_token = api_token
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"Bearer {api_token}",
-                "Content-Type": "application/json",
-                "User-Agent": "TerraFix/0.1.0",
-            }
-        )
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "TerraFix/0.1.0",
+        })
 
-        log_with_context(
-            logger,
-            "info",
-            "Initialized Vanta client",
-            base_url=self.base_url,
-        )
+        # Store credentials for token refresh
+        self._client_id = client_id
+        self._client_secret = client_secret
+
+        # Authenticate
+        if api_token:
+            # Legacy mode: use provided token directly
+            self.session.headers["Authorization"] = f"Bearer {api_token}"
+            log_with_context(
+                logger,
+                "info",
+                "Initialized Vanta client with API token",
+                base_url=self.base_url,
+            )
+        elif client_id and client_secret:
+            # OAuth mode: exchange credentials for token
+            self._authenticate_oauth()
+        else:
+            raise VantaApiError(
+                "Must provide either api_token or both client_id and client_secret",
+                retryable=False,
+            )
+
+    def _authenticate_oauth(self) -> None:
+        """
+        Obtain OAuth access token using client credentials flow.
+
+        Uses the vanta-api.all:read scope as documented in Vanta's API.
+
+        Raises:
+            VantaApiError: If authentication fails
+        """
+        if not self._client_id or not self._client_secret:
+            raise VantaApiError(
+                "OAuth credentials not configured",
+                retryable=False,
+            )
+
+        try:
+            response = self.session.post(
+                f"{self.base_url}{self.OAUTH_TOKEN_ENDPOINT}",
+                json={
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                    "scope": "vanta-api.all:read",
+                    "grant_type": "client_credentials",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            token_data = response.json()
+            access_token = token_data.get("access_token")
+
+            if not access_token:
+                raise VantaApiError(
+                    "No access token in authentication response",
+                    retryable=False,
+                )
+
+            self.session.headers["Authorization"] = f"Bearer {access_token}"
+
+            log_with_context(
+                logger,
+                "info",
+                "Successfully authenticated with Vanta API via OAuth",
+                base_url=self.base_url,
+            )
+
+        except requests.HTTPError as e:
+            status_code = e.response.status_code if e.response else None
+            raise VantaApiError(
+                f"Vanta OAuth authentication failed: {e}",
+                status_code=status_code,
+                retryable=False,
+            ) from e
+        except requests.RequestException as e:
+            raise VantaApiError(
+                f"Vanta authentication request failed: {e}",
+                retryable=True,
+            ) from e
+
+    def _acquire_rate_limit(self, timeout: float = 120.0) -> None:
+        """
+        Acquire rate limit token before making an API request.
+
+        Args:
+            timeout: Maximum seconds to wait for rate limit token
+
+        Raises:
+            VantaApiError: If rate limit acquisition times out
+        """
+        if not VANTA_MANAGEMENT_LIMITER.acquire(timeout=timeout):
+            raise VantaApiError(
+                "Rate limit acquisition timeout - too many requests",
+                retryable=True,
+            )
 
     def get_failing_tests(
         self,
@@ -134,7 +263,8 @@ class VantaClient:
         Retrieve all currently failing tests.
 
         Polls Vanta API for all failing compliance tests, with optional
-        filtering by framework and timestamp. Handles pagination automatically.
+        filtering by framework and timestamp. Handles pagination automatically
+        and respects rate limits.
 
         Args:
             frameworks: Filter by framework (SOC2, ISO27001, etc.)
@@ -158,10 +288,13 @@ class VantaClient:
             since=since.isoformat() if since else None,
         )
 
-        failures = []
-        page_cursor = None
+        failures: list[Failure] = []
+        page_cursor: str | None = None
 
         while True:
+            # Acquire rate limit before each request
+            self._acquire_rate_limit()
+
             params: dict[str, Any] = {
                 "status": "failing",
                 "pageSize": 50,
@@ -175,14 +308,38 @@ class VantaClient:
 
             try:
                 response = self.session.get(
-                    f"{self.base_url}/v1/tests",
+                    f"{self.base_url}{self.TESTS_ENDPOINT}",
                     params=params,
                     timeout=30,
                 )
                 response.raise_for_status()
+
             except requests.HTTPError as e:
                 status_code = e.response.status_code if e.response else None
                 response_body = e.response.text if e.response else None
+
+                # Handle 401 by attempting re-authentication
+                if status_code == 401 and self._client_id and self._client_secret:
+                    log_with_context(
+                        logger,
+                        "warning",
+                        "Received 401, attempting re-authentication",
+                    )
+                    self._authenticate_oauth()
+                    continue
+
+                # Handle rate limiting
+                if status_code == 429:
+                    log_with_context(
+                        logger,
+                        "warning",
+                        "Vanta API rate limit hit",
+                    )
+                    raise VantaApiError(
+                        "Vanta API rate limit exceeded",
+                        status_code=429,
+                        retryable=True,
+                    ) from e
 
                 log_with_context(
                     logger,
@@ -198,6 +355,7 @@ class VantaClient:
                     response_body=response_body,
                     retryable=(status_code is None or status_code >= 500),
                 ) from e
+
             except requests.RequestException as e:
                 log_with_context(
                     logger,
@@ -216,7 +374,8 @@ class VantaClient:
             # Filter by timestamp if provided
             if since:
                 batch = [
-                    t for t in batch if datetime.fromisoformat(t["failed_at"]) > since
+                    t for t in batch
+                    if self._parse_timestamp(t.get("failed_at", "")) > since
                 ]
 
             # Convert to Failure objects with enrichment
@@ -250,6 +409,24 @@ class VantaClient:
         )
 
         return failures
+
+    def _parse_timestamp(self, timestamp: str) -> datetime:
+        """
+        Parse ISO 8601 timestamp from Vanta API.
+
+        Args:
+            timestamp: ISO 8601 formatted timestamp string
+
+        Returns:
+            Parsed datetime object (returns epoch if parsing fails)
+        """
+        try:
+            # Handle various ISO 8601 formats
+            if timestamp.endswith("Z"):
+                timestamp = timestamp[:-1] + "+00:00"
+            return datetime.fromisoformat(timestamp)
+        except (ValueError, TypeError):
+            return datetime.min
 
     def get_failing_tests_since(self, last_check: datetime | None) -> list[Failure]:
         """
@@ -293,8 +470,11 @@ class VantaClient:
         resource_id = failure.get("resource_id")
         if resource_id:
             try:
+                # Acquire rate limit for enrichment request
+                self._acquire_rate_limit()
+
                 resource_response = self.session.get(
-                    f"{self.base_url}/v1/resources/{resource_id}",
+                    f"{self.base_url}{self.RESOURCES_ENDPOINT}/{resource_id}",
                     timeout=30,
                 )
                 resource_response.raise_for_status()
@@ -326,6 +506,14 @@ class VantaClient:
                     error=str(e),
                 )
                 # Continue without enrichment
+            except VantaApiError:
+                # Rate limit timeout during enrichment - skip enrichment
+                log_with_context(
+                    logger,
+                    "warning",
+                    "Rate limit timeout during enrichment, skipping",
+                    resource_id=resource_id,
+                )
 
         return failure
 
@@ -333,9 +521,10 @@ class VantaClient:
         """
         Generate deterministic hash for deduplication.
 
-        Creates a SHA256 hash from the failure signature (test_id, resource_arn,
-        and failed_at timestamp). This hash is used by the state store to
-        detect and skip duplicate failures.
+        Creates a SHA256 hash from the failure signature using test_id and
+        resource_arn only. The timestamp is intentionally excluded to ensure
+        that recurring failures for the same issue produce the same hash,
+        preventing duplicate PRs when issues regress.
 
         Args:
             failure: Test failure object
@@ -346,7 +535,12 @@ class VantaClient:
         Example:
             >>> failure_hash = client.generate_failure_hash(failure)
             >>> print(f"Hash: {failure_hash}")
-        """
-        signature = f"{failure.test_id}-{failure.resource_arn}-{failure.failed_at}"
-        return hashlib.sha256(signature.encode()).hexdigest()
 
+        Note:
+            The hash excludes failed_at timestamp to prevent duplicate PRs
+            when the same compliance issue recurs after being fixed.
+        """
+        # Exclude timestamp to prevent duplicates on regression
+        # Only test_id and resource_arn identify a unique compliance issue
+        signature = f"{failure.test_id}-{failure.resource_arn}"
+        return hashlib.sha256(signature.encode()).hexdigest()

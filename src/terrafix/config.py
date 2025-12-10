@@ -110,9 +110,14 @@ class Settings(BaseSettings):
         ge=1,
         description="Vanta polling interval in seconds",
     )
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis connection URL for state storage (redis://host:port/db)",
+    )
+    # Deprecated: Use redis_url instead. Kept for backwards compatibility.
     sqlite_path: str = Field(
         default="./terrafix.db",
-        description="Path to SQLite database file",
+        description="Path to SQLite database file (deprecated, use redis_url)",
     )
     max_concurrent_workers: int = Field(
         default=3,

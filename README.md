@@ -1,9 +1,3 @@
-TODO:
-
-- Probably have to either move off SQLite (because of ephemeral state) or think of some other way of avoiding race conditions or duplication if the same compliance "issue" gets detected again before it gets fixed.
-- Try to implement better durable execution (automatic retries, etc).
-- Lots of testing.
-
 # TerraFix: AI-Powered Terraform Compliance Remediation Bot
 
 **TerraFix** is a long-running service that automatically detects Vanta compliance failures, analyzes Terraform configurations, generates compliant fixes using Claude Sonnet 4.5 via AWS Bedrock, and opens GitHub Pull Requests for human review.
@@ -13,27 +7,33 @@ TODO:
 ```
 Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
                        ↓
-                SQLite State Store
+                 Redis State Store
+                       ↓
+               Health Check (HTTP)
 ```
 
 **Key Differentiator**: Human-in-the-loop architecture. No direct AWS access required. We work at the Infrastructure-as-Code layer where changes belong, not directly on cloud resources.
 
 ## Components
 
-1. **VantaClient**: Polls Vanta API every 5 minutes for compliance test failures
-2. **TerraformAnalyzer**: Parses Terraform HCL and locates failing resources by ARN
-3. **TerraformRemediationGenerator**: Uses AWS Bedrock Claude to generate fixes
-4. **GitHubPRCreator**: Creates comprehensive PRs with review checklists
-5. **StateStore**: SQLite-based deduplication to avoid duplicate PRs
-6. **Orchestrator**: Coordinates the end-to-end remediation pipeline
-7. **Service**: Long-running worker loop for continuous monitoring
+1. **VantaClient**: Polls Vanta API every 5 minutes for compliance test failures (OAuth with `vanta-api.all:read`)
+2. **RateLimiter**: Token-bucket limiting for Vanta API (50/20 rpm)
+3. **TerraformAnalyzer**: Parses Terraform HCL and locates failing resources by ARN (rich AWS→TF mapping)
+4. **TerraformRemediationGenerator**: Uses AWS Bedrock Claude to generate fixes
+5. **TerraformValidator**: Runs `terraform fmt` and `terraform validate` on generated fixes
+6. **GitHubPRCreator**: Creates comprehensive PRs with review checklists (atomic branch creation)
+7. **SecureGitClient**: Clones repos via credential helper (no tokens in process args)
+8. **RedisStateStore**: Redis-based deduplication with TTL to avoid duplicate PRs
+9. **HealthCheckServer**: `/health`, `/ready`, `/status` endpoints for ECS/K8s probes
+10. **Orchestrator/Service**: Coordinates and runs the end-to-end remediation pipeline
 
 ## Prerequisites
 
 - **Python 3.14** (yes, it exists as of November 2025)
 - **AWS Account** with Bedrock access in us-west-2
-- **Vanta Account** with API access (OAuth token with `test:read` scope)
+- **Vanta Account** with API access (OAuth token with `vanta-api.all:read`)
 - **GitHub Account** with Personal Access Token (repo scope)
+- **Redis** endpoint (ElastiCache recommended for production)
 
 ## Configuration
 
@@ -42,11 +42,12 @@ All configuration is via environment variables:
 ### Required
 
 ```bash
-export VANTA_API_TOKEN="vanta_oauth_token"
+export VANTA_API_TOKEN="vanta_oauth_token"  # scope: vanta-api.all:read
 export GITHUB_TOKEN="github_personal_access_token"
 export AWS_REGION="us-west-2"
 export AWS_ACCESS_KEY_ID="aws_access_key"
 export AWS_SECRET_ACCESS_KEY="aws_secret_key"
+export REDIS_URL="redis://localhost:6379/0"
 ```
 
 ### Optional
@@ -54,11 +55,11 @@ export AWS_SECRET_ACCESS_KEY="aws_secret_key"
 ```bash
 export BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-5-v2:0"
 export POLL_INTERVAL_SECONDS="300"
-export SQLITE_PATH="./terrafix.db"
 export GITHUB_REPO_MAPPING='{"default": "org/terraform-repo"}'
 export TERRAFORM_PATH="terraform"
 export MAX_CONCURRENT_WORKERS="3"
 export LOG_LEVEL="INFO"
+export STATE_RETENTION_DAYS="7"
 ```
 
 ## Installation
@@ -109,22 +110,22 @@ terraform apply
 This provisions:
 - ECR repository for the TerraFix image
 - ECS cluster and Fargate service (2 vCPU, 4GB memory)
+- ElastiCache Redis for persistent deduplication state
 - Task definition with environment variables from Secrets Manager
 - IAM roles with least-privilege access to Bedrock and CloudWatch Logs
 - CloudWatch log group for structured JSON logs
-
-**Note**: SQLite state is ephemeral per task. For persistent deduplication across task restarts, mount an EFS volume (future enhancement).
+- Container health checks on `/health` (port 8080)
 
 ## How It Works
 
-1. **Polling**: Worker polls Vanta API every 5 minutes for failing compliance tests
-2. **Deduplication**: Checks SQLite store to avoid reprocessing the same failure
-3. **Repository Clone**: Clones the target GitHub repository into a temp directory
-4. **Terraform Analysis**: Parses `.tf` files and locates the failing resource by ARN
+1. **Polling**: Worker polls Vanta API every 5 minutes for failing compliance tests (rate-limited)
+2. **Deduplication**: Atomically claims failures in Redis to avoid duplicate PRs across restarts/workers
+3. **Repository Clone**: Securely clones the target GitHub repository (no token leakage)
+4. **Terraform Analysis**: Parses `.tf` files, locates the failing resource by ARN with rich AWS→TF mapping
 5. **Fix Generation**: Sends failure context and current Terraform config to Claude via Bedrock
-6. **Validation**: Validates generated fix and optionally runs `terraform fmt`
-7. **PR Creation**: Opens GitHub PR with comprehensive context, review checklist, and confidence level
-8. **State Tracking**: Records success/failure in SQLite for deduplication
+6. **Validation**: Runs `terraform fmt` and `terraform validate` on generated fixes; surfaces warnings
+7. **PR Creation**: Opens GitHub PR with comprehensive context, review checklist, and confidence level; atomic branch creation
+8. **State Tracking**: Records success/failure in Redis with TTL-based retention
 
 ## PR Format
 
@@ -139,11 +140,10 @@ Each PR includes:
 
 ## Limitations
 
-- **SQLite Ephemeral State**: In ECS, SQLite state is lost on task replacement (no EFS mount yet)
-- **Single-Task Deployment**: Only one worker task runs at a time to avoid SQLite concurrency issues
 - **Terraform-Only**: Currently only supports Terraform (CloudFormation/Pulumi support planned)
-- **Polling-Based**: 5-minute polling interval (Vanta webhooks not available as of Nov 2025)
+- **Polling-Based**: 5-minute polling interval (Vanta webhooks not available)
 - **No Automated Testing**: Generated fixes require human review before merging
+- **Terraform Binary Required for Validation**: If terraform is unavailable, validation falls back to skip with warnings
 
 ## Development
 
@@ -160,9 +160,8 @@ ruff format src/
 
 ## Future Enhancements
 
-- **Persistent State**: Mount EFS volume for SQLite in ECS
 - **Multi-IaC**: CloudFormation, Pulumi, CDK support
-- **Terraform Validation**: Run `terraform plan` in isolated environment
+- **Deeper Validation**: Run `terraform plan` in isolated environment
 - **Cost Analysis**: Integrate Infracost for cost impact estimates
 - **Learning from Feedback**: Track accepted/rejected PRs for continuous improvement
 - **Multi-Repository**: Concurrent processing across multiple repos
@@ -171,10 +170,11 @@ ruff format src/
 ## Security
 
 - All credentials stored in AWS Secrets Manager (ECS deployment)
-- Least-privilege IAM roles for Bedrock and CloudWatch access
+- Least-privilege IAM roles for Bedrock, ElastiCache, and CloudWatch access
 - No direct AWS resource modifications (only IaC changes via PRs)
 - Structured logs with correlation IDs for audit trails
 - Read-only Vanta API access (no write permissions needed)
+- Secure Git cloning via credential helper (tokens not exposed in process args)
 
 ## Support
 

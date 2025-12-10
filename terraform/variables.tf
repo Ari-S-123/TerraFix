@@ -74,3 +74,25 @@ variable "terraform_path" {
   default     = "."
 }
 
+variable "vpc_id" {
+  description = "VPC ID for security groups and networking"
+  type        = string
+}
+
+variable "subnet_ids" {
+  description = "Subnet IDs for ECS tasks and ElastiCache"
+  type        = list(string)
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_snapshot_retention_days" {
+  description = "Number of days to retain Redis snapshots (0 to disable)"
+  type        = number
+  default     = 1
+}
+

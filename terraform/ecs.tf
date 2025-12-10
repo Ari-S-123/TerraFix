@@ -46,8 +46,8 @@ resource "aws_ecs_task_definition" "terrafix" {
           value = tostring(var.poll_interval_seconds)
         },
         {
-          name  = "SQLITE_PATH"
-          value = "/tmp/terrafix.db"
+          name  = "REDIS_URL"
+          value = "redis://${aws_elasticache_cluster.terrafix.cache_nodes[0].address}:${aws_elasticache_cluster.terrafix.port}/0"
         },
         {
           name  = "LOG_LEVEL"
@@ -90,6 +90,23 @@ resource "aws_ecs_task_definition" "terrafix" {
           "awslogs-stream-prefix" = "ecs"
         }
       }
+
+      # Health check configuration for container orchestration
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
+      # Expose health check port
+      portMappings = [
+        {
+          containerPort = 8080
+          protocol      = "tcp"
+        }
+      ]
     }
   ])
 
@@ -104,7 +121,7 @@ resource "aws_ecs_service" "terrafix" {
   name            = "${var.project_name}-${var.environment}"
   cluster         = aws_ecs_cluster.terrafix.id
   task_definition = aws_ecs_task_definition.terrafix.arn
-  desired_count   = 1 # Single task for SQLite simplicity
+  desired_count   = 1 # Single task with Redis for state persistence
   launch_type     = "FARGATE"
 
   network_configuration {
