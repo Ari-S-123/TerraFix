@@ -156,7 +156,99 @@ mypy src/
 
 # Format
 ruff format src/
+
+# Run unit tests
+pytest tests/unit/ -v
+
+# Run tests with coverage
+pytest tests/unit/ --cov=src/terrafix --cov-report=term-missing
 ```
+
+## Testing
+
+TerraFix includes a comprehensive test suite using pytest with VCR.py for API mocking:
+
+```bash
+# Run all unit tests
+pytest tests/unit/ -v
+
+# Run specific test module
+pytest tests/unit/test_vanta_client.py -v
+
+# Run with coverage report
+pytest tests/unit/ --cov=src/terrafix --cov-report=html
+
+# View coverage report
+open htmlcov/index.html
+```
+
+### Test Fixtures
+
+Sample Terraform configurations are provided in `tests/fixtures/terraform/`:
+- `small/` - Minimal 2-resource configuration
+- `medium/` - Multi-service setup with S3, IAM, security groups
+- `large/` - Enterprise setup with VPC, RDS, comprehensive IAM
+
+## Observability
+
+### Metrics
+
+TerraFix collects metrics via the built-in metrics collector, exposed at `/metrics`:
+
+```bash
+# View metrics (when service is running)
+curl http://localhost:8080/metrics
+```
+
+Available metrics:
+- **Counters**: `failures_processed_total`, `prs_created_total`, `api_errors_total`
+- **Gauges**: `queue_depth`, `active_workers`
+- **Timings**: Per-stage latencies (fetch, clone, analyze, generate, validate, create PR)
+
+### Health Endpoints
+
+- `/health` - Basic health check
+- `/ready` - Readiness probe (checks Redis connectivity)
+- `/status` - Detailed status with component health
+- `/metrics` - JSON metrics endpoint
+
+## Experiment Harness
+
+TerraFix includes an experiment harness for performance testing and benchmarking:
+
+```bash
+# Run throughput experiment
+python -m terrafix.experiments run --type throughput --preset baseline
+
+# Run stress test with burst workload
+python -m terrafix.experiments run --type throughput --preset stress_test
+
+# Run resilience test with failure injection
+python -m terrafix.experiments run --type resilience --failure-rate 0.2
+
+# Run scalability test across repo sizes
+python -m terrafix.experiments run --type scalability
+
+# List available presets
+python -m terrafix.experiments list-presets
+```
+
+### Workload Profiles
+
+- **STEADY_STATE**: Constant rate of failures (baseline testing)
+- **BURST**: Periodic high-volume spikes (stress testing)
+- **CASCADE**: Exponentially increasing load (finding limits)
+
+## CI/CD
+
+TerraFix uses GitHub Actions for continuous integration:
+
+- **Linting**: Ruff check and format verification
+- **Type Checking**: MyPy strict mode
+- **Unit Tests**: Pytest with coverage reporting
+- **Coverage**: Uploaded to Codecov
+
+See `.github/workflows/ci.yml` for the full pipeline configuration.
 
 ## Future Enhancements
 

@@ -1,0 +1,76 @@
+# GitHub Actions CI Pipeline for TerraFix
+#
+# This workflow runs on every push and pull request to ensure code quality
+# through linting, type checking, and automated testing.
+#
+# Jobs:
+#   lint-and-test: Runs ruff linter, mypy type checker, and pytest unit tests
+#
+# Coverage reports are uploaded to Codecov for tracking.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Run Ruff linter
+        run: |
+          ruff check src/ tests/
+
+      - name: Run Ruff formatter check
+        run: |
+          ruff format --check src/ tests/
+
+      - name: Run mypy type checker
+        run: |
+          mypy src/
+
+      - name: Run unit tests with coverage
+        env:
+          # Provide dummy environment variables for tests
+          VANTA_API_TOKEN: "test_token"
+          GITHUB_TOKEN: "test_token"
+          AWS_REGION: "us-west-2"
+          AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
+          AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        run: |
+          pytest tests/unit/ -v --cov=src/terrafix --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+

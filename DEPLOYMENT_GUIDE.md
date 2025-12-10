@@ -261,6 +261,50 @@ The `GITHUB_REPO_MAPPING` environment variable maps AWS resources to GitHub repo
 
 ## Monitoring and Operations
 
+### Health Check Endpoints
+
+TerraFix exposes several HTTP endpoints on port 8080:
+
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `/health` | Basic liveness check | `{"status": "healthy"}` |
+| `/ready` | Readiness check (includes Redis) | `{"status": "ready", "redis": "connected"}` |
+| `/status` | Detailed service status | Component health, uptime, counts |
+| `/metrics` | JSON metrics endpoint | Counters, gauges, timing statistics |
+
+```bash
+# Check health locally
+curl http://localhost:8080/health
+
+# View metrics
+curl http://localhost:8080/metrics | jq .
+```
+
+### Metrics
+
+Available metrics at `/metrics`:
+
+**Counters:**
+- `failures_processed_total` - Total failures processed
+- `failures_successful_total` - Successfully remediated
+- `failures_skipped_total` - Skipped (duplicates)
+- `failures_failed_total` - Processing errors
+- `prs_created_total` - PRs created
+- `api_errors_total` - API errors by service
+
+**Gauges:**
+- `queue_depth` - Current processing queue depth
+- `active_workers` - Active worker count
+
+**Timings (per-stage latencies):**
+- `fetch_vanta` - Time to fetch from Vanta API
+- `clone_repo` - Git clone duration
+- `parse_terraform` - Terraform parsing time
+- `bedrock_inference` - Claude inference time
+- `validate_fix` - Terraform validation time
+- `create_pr` - PR creation time
+- `total_processing` - End-to-end processing time
+
 ### CloudWatch Logs
 
 View structured JSON logs:

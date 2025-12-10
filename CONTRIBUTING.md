@@ -104,14 +104,63 @@ def process_failure(
 
 ## Testing
 
-### Unit Tests (Future)
+TerraFix has a comprehensive test suite using pytest with VCR.py for HTTP mocking and fakeredis for Redis mocking.
+
+### Running Tests
 
 ```bash
-# Run unit tests
-pytest tests/unit/
+# Run all unit tests
+pytest tests/unit/ -v
 
-# With coverage
-pytest --cov=src/terrafix tests/unit/
+# Run specific test file
+pytest tests/unit/test_vanta_client.py -v
+
+# Run specific test class
+pytest tests/unit/test_redis_state_store.py::TestCheckAndClaim -v
+
+# Run with coverage report
+pytest tests/unit/ --cov=src/terrafix --cov-report=term-missing
+
+# Generate HTML coverage report
+pytest tests/unit/ --cov=src/terrafix --cov-report=html
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py              # Shared fixtures (mock clients, sample data)
+├── fixtures/
+│   ├── cassettes/           # VCR.py recorded HTTP interactions
+│   └── terraform/           # Sample Terraform configurations
+│       ├── small/           # Minimal config for quick tests
+│       ├── medium/          # Multi-service setup
+│       └── large/           # Enterprise setup for scalability tests
+└── unit/
+    ├── test_config.py       # Configuration tests
+    ├── test_vanta_client.py # Vanta API client tests
+    ├── test_terraform_analyzer.py # Terraform parsing tests
+    ├── test_remediation_generator.py # Bedrock integration tests
+    ├── test_github_pr_creator.py # GitHub PR tests
+    ├── test_orchestrator.py # Pipeline orchestration tests
+    └── test_redis_state_store.py # Redis state store tests
+```
+
+### Writing Tests
+
+Use the provided fixtures from `conftest.py`:
+
+```python
+def test_process_failure_success(
+    mock_settings: Settings,
+    sample_failure: Failure,
+    mock_redis_client: MagicMock,
+    mock_bedrock_client: MagicMock,
+    mock_github_client: MagicMock,
+) -> None:
+    """Test successful failure processing."""
+    # Test implementation using fixtures
+    ...
 ```
 
 ### Integration Tests (Future)
@@ -142,6 +191,24 @@ EOF
 
 # Process test failure
 python -m terrafix.cli process-once --failure-json test_failure.json
+```
+
+### Experiment Harness
+
+For performance testing and benchmarking:
+
+```bash
+# Run throughput experiment
+python -m terrafix.experiments run --type throughput --preset baseline
+
+# Run resilience test with 20% failure injection
+python -m terrafix.experiments run --type resilience --failure-rate 0.2
+
+# Run scalability test
+python -m terrafix.experiments run --type scalability
+
+# List available presets
+python -m terrafix.experiments list-presets
 ```
 
 ## Making Changes
@@ -280,28 +347,58 @@ log_with_context(
 
 ```
 terrafix/
-├── src/terrafix/           # Source code
-│   ├── __init__.py         # Package metadata
-│   ├── config.py           # Configuration management
-│   ├── logging_config.py   # Structured logging
-│   ├── errors.py           # Exception hierarchy
-│   ├── vanta_client.py     # Vanta API integration
-│   ├── terraform_analyzer.py  # Terraform parsing
-│   ├── remediation_generator.py  # Bedrock integration
-│   ├── github_pr_creator.py  # GitHub PR creation
-│   ├── state_store.py      # SQLite state management
-│   ├── orchestrator.py     # Main processing pipeline
-│   ├── service.py          # Long-running service
-│   └── cli.py              # CLI interface
-├── tests/                  # Tests (future)
-│   ├── unit/
-│   └── integration/
-├── terraform/              # Infrastructure as code
-├── requirements.txt        # Production dependencies
-├── requirements-dev.txt    # Development dependencies
-├── pyproject.toml          # Python project configuration
-├── Dockerfile              # Container image
-└── README.md               # Main documentation
+├── src/terrafix/              # Source code
+│   ├── __init__.py            # Package metadata
+│   ├── __main__.py            # Entry point
+│   ├── cli.py                 # CLI interface
+│   ├── config.py              # Configuration management
+│   ├── errors.py              # Exception hierarchy
+│   ├── logging_config.py      # Structured logging
+│   ├── metrics.py             # Metrics collection system
+│   ├── health_check.py        # Health check endpoints
+│   ├── rate_limiter.py        # Token bucket rate limiter
+│   ├── vanta_client.py        # Vanta API integration
+│   ├── terraform_analyzer.py  # Terraform HCL parsing
+│   ├── terraform_validator.py # Terraform validation
+│   ├── remediation_generator.py # Bedrock Claude integration
+│   ├── github_pr_creator.py   # GitHub PR creation
+│   ├── secure_git.py          # Secure Git operations
+│   ├── redis_state_store.py   # Redis state management
+│   ├── state_store.py         # State store interface
+│   ├── resource_mappings.py   # AWS to Terraform mappings
+│   ├── orchestrator.py        # Main processing pipeline
+│   ├── service.py             # Long-running service
+│   └── experiments/           # Experiment harness
+│       ├── __init__.py        # Package exports
+│       ├── __main__.py        # CLI entry point
+│       ├── cli.py             # Experiment CLI
+│       ├── profiles.py        # Workload profiles
+│       ├── generator.py       # Synthetic failure generator
+│       ├── injector.py        # Failure injection
+│       ├── reporter.py        # Results reporting
+│       └── runner.py          # Experiment orchestration
+├── tests/                     # Test suite
+│   ├── conftest.py            # Shared pytest fixtures
+│   ├── fixtures/              # Test data
+│   │   ├── cassettes/         # VCR.py HTTP recordings
+│   │   └── terraform/         # Sample Terraform configs
+│   └── unit/                  # Unit tests
+│       ├── test_config.py
+│       ├── test_vanta_client.py
+│       ├── test_terraform_analyzer.py
+│       ├── test_remediation_generator.py
+│       ├── test_github_pr_creator.py
+│       ├── test_orchestrator.py
+│       └── test_redis_state_store.py
+├── terraform/                 # Infrastructure as code
+├── .github/workflows/         # CI/CD pipelines
+│   └── ci.yml                 # GitHub Actions workflow
+├── requirements.txt           # Production dependencies
+├── requirements-dev.txt       # Development dependencies
+├── pyproject.toml             # Python project configuration
+├── Dockerfile                 # Container image
+├── README.md                  # Main documentation
+└── CONTRIBUTING.md            # This file
 ```
 
 ## Code Review Guidelines

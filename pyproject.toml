@@ -18,7 +18,12 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.7.0",
     "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
     "types-requests>=2.31.0",
+    "vcrpy>=6.0.0",
+    "responses>=0.24.0",
+    "fakeredis>=2.20.0",
 ]
 
 [build-system]
@@ -68,9 +73,45 @@ ignore_missing_imports = true
 module = "github.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "vcr.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "responses.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "fakeredis.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["src/terrafix"]
+branch = true
+omit = [
+    "*/experiments/*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+fail_under = 70
+show_missing = true
 
