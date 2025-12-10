@@ -47,7 +47,7 @@ variable "github_token" {
 variable "bedrock_model_id" {
   description = "AWS Bedrock Claude model ID"
   type        = string
-  default     = "anthropic.claude-sonnet-4-5-v2:0"
+  default     = "anthropic.claude-opus-4-5-20251101-v1:0"
 }
 
 variable "poll_interval_seconds" {

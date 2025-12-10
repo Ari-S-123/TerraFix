@@ -53,7 +53,7 @@ export REDIS_URL="redis://localhost:6379/0"
 ### Optional
 
 ```bash
-export BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-5-v2:0"
+export BEDROCK_MODEL_ID="anthropic.claude-opus-4-5-20251101-v1:0"
 export POLL_INTERVAL_SECONDS="300"
 export GITHUB_REPO_MAPPING='{"default": "org/terraform-repo"}'
 export TERRAFORM_PATH="terraform"

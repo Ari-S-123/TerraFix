@@ -12,7 +12,7 @@ Usage:
     from terrafix.remediation_generator import TerraformRemediationGenerator
 
     generator = TerraformRemediationGenerator(
-        model_id="anthropic.claude-sonnet-4-5-v2:0",
+        model_id="anthropic.claude-opus-4-5-20251101-v1:0",
         region="us-west-2"
     )
 
@@ -92,7 +92,7 @@ class TerraformRemediationGenerator:
 
     def __init__(
         self,
-        model_id: str = "anthropic.claude-sonnet-4-5-v2:0",
+        model_id: str = "anthropic.claude-opus-4-5-20251101-v1:0",
         region: str = "us-west-2",
     ) -> None:
         """

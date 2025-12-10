@@ -103,7 +103,7 @@ Configured in `ecs.tf` task definition:
 - `VANTA_API_TOKEN`: From Secrets Manager
 - `GITHUB_TOKEN`: From Secrets Manager
 - `AWS_REGION`: us-west-2
-- `BEDROCK_MODEL_ID`: anthropic.claude-sonnet-4-5-v2:0
+- `BEDROCK_MODEL_ID`: anthropic.claude-opus-4-5-20251101-v1:0
 - `POLL_INTERVAL_SECONDS`: 300 (5 minutes)
 - `REDIS_URL`: redis://<elasticache-endpoint>:6379/0
 - `LOG_LEVEL`: INFO

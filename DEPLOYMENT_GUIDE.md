@@ -68,7 +68,7 @@ AWS_SECRET_ACCESS_KEY=your_aws_secret
 REDIS_URL=redis://localhost:6379/0   # For local/dev; Terraform provides in ECS
 
 # Optional
-BEDROCK_MODEL_ID=anthropic.claude-sonnet-4-5-v2:0
+BEDROCK_MODEL_ID=anthropic.claude-opus-4-5-20251101-v1:0
 POLL_INTERVAL_SECONDS=300
 GITHUB_REPO_MAPPING={"default": "your-org/terraform-repo"}
 TERRAFORM_PATH=terraform
@@ -234,7 +234,7 @@ All configuration is via environment variables:
 | `AWS_REGION` | Yes | - | AWS region for Bedrock |
 | `AWS_ACCESS_KEY_ID` | Yes | - | AWS credentials |
 | `AWS_SECRET_ACCESS_KEY` | Yes | - | AWS credentials |
-| `BEDROCK_MODEL_ID` | No | `anthropic.claude-sonnet-4-5-v2:0` | Claude model ID |
+| `BEDROCK_MODEL_ID` | No | `anthropic.claude-opus-4-5-20251101-v1:0` | Claude model ID |
 | `POLL_INTERVAL_SECONDS` | No | `300` | Vanta polling interval |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection URL (Terraform sets in ECS) |
 | `GITHUB_REPO_MAPPING` | No | `{"default": ""}` | Resource to repo mapping |

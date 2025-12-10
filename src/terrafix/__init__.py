@@ -26,7 +26,7 @@ Environment Variables:
     AWS_REGION: AWS region for Bedrock (required)
     AWS_ACCESS_KEY_ID: AWS credentials (required)
     AWS_SECRET_ACCESS_KEY: AWS credentials (required)
-    BEDROCK_MODEL_ID: Claude model ID (default: anthropic.claude-sonnet-4-5-v2:0)
+    BEDROCK_MODEL_ID: Claude model ID (default: anthropic.claude-opus-4-5-20251101-v1:0)
     POLL_INTERVAL_SECONDS: Polling interval in seconds (default: 300)
     SQLITE_PATH: Path to SQLite database (default: ./terrafix.db)
     GITHUB_REPO_MAPPING: JSON mapping of resource patterns to repos (optional)

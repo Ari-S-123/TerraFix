@@ -473,7 +473,7 @@ class TerraformRemediationGenerator:
     
     def __init__(
         self,
-        model_id: str = "anthropic.claude-sonnet-4-5-v2:0",
+        model_id: str = "anthropic.claude-opus-4-5-20251101-v1:0",
         region: str = "us-west-2"
     ):
         """
@@ -1301,7 +1301,7 @@ export VANTA_API_TOKEN="vanta_oauth_token"
 export GITHUB_TOKEN="github_pat_with_repo_scope"
 export AWS_REGION="us-west-2"
 export REDIS_URL="redis://cache.xxxxx.amazonaws.com:6379"
-export BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-5-v2:0"
+export BEDROCK_MODEL_ID="anthropic.claude-opus-4-5-20251101-v1:0"
 export POLL_INTERVAL_SECONDS="300"
 ```
 
@@ -1357,7 +1357,7 @@ export AWS_SECRET_ACCESS_KEY="aws_secret_key"
 export AWS_REGION="us-west-2"
 
 # Optional
-export BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-5-v2:0"
+export BEDROCK_MODEL_ID="anthropic.claude-opus-4-5-20251101-v1:0"
 export TERRAFORM_VERSION="1.10.0"
 export POLL_INTERVAL_SECONDS="300"
 ```
