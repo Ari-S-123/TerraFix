@@ -18,7 +18,7 @@ Usage:
         content=fixed_config,
         filename="main.tf"
     )
-    
+
     if result.is_valid:
         # Use result.formatted_content for PR
         pass
@@ -116,7 +116,7 @@ class TerraformValidator:
                 version=version_line,
             )
 
-        except FileNotFoundError:
+        except FileNotFoundError as err:
             log_with_context(
                 logger,
                 "error",
@@ -125,12 +125,12 @@ class TerraformValidator:
             )
             raise TerraformValidationError(
                 f"Terraform binary not found at '{self.terraform_path}'",
-            )
+            ) from err
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as err:
             raise TerraformValidationError(
                 "Terraform version check timed out",
-            )
+            ) from err
 
     def validate_configuration(
         self,
@@ -456,4 +456,3 @@ class TerraformValidator:
             if result.is_valid and result.formatted_content:
                 return result.formatted_content
             return content
-

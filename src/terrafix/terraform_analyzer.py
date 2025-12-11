@@ -21,11 +21,11 @@ Usage:
         print(f"Found resource in {file_path}")
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-import hcl2  # type: ignore[import-untyped]
-from typing import cast
+import hcl2
 
 from terrafix.errors import TerraformParseError
 from terrafix.logging_config import get_logger, log_with_context
@@ -89,11 +89,10 @@ class TerraformAnalyzer:
         """
         for tf_file in self.terraform_files:
             try:
-                with open(tf_file, "r", encoding="utf-8") as f:
+                with open(tf_file, encoding="utf-8") as f:
                     content = f.read()
 
-                # python-hcl2 parses Terraform HCL
-                parsed: dict[str, Any] = cast(dict[str, Any], hcl2.loads(content))
+                parsed: dict[str, Any] = self._parse_hcl(content)
 
                 self.parsed_configs[str(tf_file)] = {
                     "content": content,
@@ -127,6 +126,29 @@ class TerraformAnalyzer:
             parsed_files=len(self.parsed_configs),
             failed_files=len(self.terraform_files) - len(self.parsed_configs),
         )
+
+    def _parse_hcl(self, content: str) -> dict[str, Any]:
+        """
+        Safely parse Terraform HCL content into a dictionary.
+
+        Uses python-hcl2's loads function while verifying it exists to avoid
+        attribute errors when the library interface changes.
+
+        Args:
+            content: Raw Terraform file contents
+
+        Returns:
+            Parsed HCL as a dictionary
+
+        Raises:
+            TerraformParseError: If the hcl2.loads function is unavailable.
+        """
+        load_fn: Callable[[str], object] | None = getattr(hcl2, "loads", None)
+        if load_fn is None:
+            raise TerraformParseError("hcl2.loads is not available for Terraform parsing")
+
+        parsed_raw = load_fn(content)
+        return cast(dict[str, Any], parsed_raw)
 
     def find_resource_by_arn(
         self,
@@ -196,7 +218,9 @@ class TerraformAnalyzer:
 
             # Look for matching resource blocks
             if "resource" in parsed_data:
-                resources_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_data["resource"])
+                resources_list: list[dict[str, Any]] = cast(
+                    list[dict[str, Any]], parsed_data["resource"]
+                )
                 for resources in resources_list:
                     for res_type, res_instances in resources.items():
                         if res_type == tf_type:
@@ -252,7 +276,9 @@ class TerraformAnalyzer:
             if "resource" not in parsed_data:
                 continue
 
-            resources_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_data["resource"])
+            resources_list: list[dict[str, Any]] = cast(
+                list[dict[str, Any]], parsed_data["resource"]
+            )
             for resources in resources_list:
                 for res_type, res_instances in resources.items():
                     res_instances_dict: dict[str, Any] = cast(dict[str, Any], res_instances)
@@ -339,7 +365,8 @@ class TerraformAnalyzer:
         """
         # Check for explicit ARN in config
         if "arn" in resource_config:
-            return resource_config["arn"] == arn
+            arn_value: str = str(resource_config["arn"])
+            return arn_value == arn
 
         # Check for bucket name in S3 resources
         if "bucket" in resource_config:
@@ -392,8 +419,12 @@ class TerraformAnalyzer:
         config_entry = self.parsed_configs.get(file_path, {})
         parsed_cfg: dict[str, Any] = cast(dict[str, Any], config_entry.get("parsed", {}))
 
-        provider_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("provider", []))
-        variable_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("variable", []))
+        provider_list: list[dict[str, Any]] = cast(
+            list[dict[str, Any]], parsed_cfg.get("provider", [])
+        )
+        variable_list: list[dict[str, Any]] = cast(
+            list[dict[str, Any]], parsed_cfg.get("variable", [])
+        )
         output_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("output", []))
         module_list: list[dict[str, Any]] = cast(list[dict[str, Any]], parsed_cfg.get("module", []))
 
@@ -441,4 +472,3 @@ class TerraformAnalyzer:
             )
 
         return str(config["content"])
-

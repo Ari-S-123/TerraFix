@@ -183,7 +183,7 @@ class ExperimentReporter:
 
         lines = [
             "=" * 60,
-            f"TerraFix Experiment Report",
+            "TerraFix Experiment Report",
             "=" * 60,
             "",
             f"Experiment Type: {r.experiment_type}",
@@ -205,25 +205,29 @@ class ExperimentReporter:
         ]
 
         if latency_stats:
-            lines.extend([
-                "-" * 40,
-                "Latency Statistics (ms)",
-                "-" * 40,
-                f"Min: {latency_stats['min']:.1f}",
-                f"Max: {latency_stats['max']:.1f}",
-                f"Mean: {latency_stats['mean']:.1f}",
-                f"Median: {latency_stats['median']:.1f}",
-                f"P95: {latency_stats['p95']:.1f}",
-                f"P99: {latency_stats['p99']:.1f}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "-" * 40,
+                    "Latency Statistics (ms)",
+                    "-" * 40,
+                    f"Min: {latency_stats['min']:.1f}",
+                    f"Max: {latency_stats['max']:.1f}",
+                    f"Mean: {latency_stats['mean']:.1f}",
+                    f"Median: {latency_stats['median']:.1f}",
+                    f"P95: {latency_stats['p95']:.1f}",
+                    f"P99: {latency_stats['p99']:.1f}",
+                    "",
+                ]
+            )
 
         if r.stage_timings:
-            lines.extend([
-                "-" * 40,
-                "Stage Timing Breakdown (ms avg)",
-                "-" * 40,
-            ])
+            lines.extend(
+                [
+                    "-" * 40,
+                    "Stage Timing Breakdown (ms avg)",
+                    "-" * 40,
+                ]
+            )
             for stage, timings in r.stage_timings.items():
                 if timings:
                     avg = statistics.mean(timings)
@@ -231,11 +235,13 @@ class ExperimentReporter:
             lines.append("")
 
         if r.errors:
-            lines.extend([
-                "-" * 40,
-                f"Errors ({len(r.errors)} total)",
-                "-" * 40,
-            ])
+            lines.extend(
+                [
+                    "-" * 40,
+                    f"Errors ({len(r.errors)} total)",
+                    "-" * 40,
+                ]
+            )
             # Show first 5 unique errors
             unique_errors = list(set(r.errors))[:5]
             for error in unique_errors:
@@ -371,4 +377,3 @@ class ExperimentReporter:
             writer = csv.DictWriter(f, fieldnames=row.keys())
             writer.writeheader()
             writer.writerow(row)
-

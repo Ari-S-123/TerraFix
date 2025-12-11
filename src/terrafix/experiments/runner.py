@@ -359,10 +359,11 @@ class ExperimentRunner:
                 f"{r.success_rate:<10.1f}"
             )
 
-        lines.extend([
-            "",
-            "=" * 70,
-        ])
+        lines.extend(
+            [
+                "",
+                "=" * 70,
+            ]
+        )
 
         return "\n".join(lines)
-

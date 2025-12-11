@@ -269,7 +269,9 @@ You always respond with valid JSON containing the fix details. You never include
             error_dict: dict[str, Any] = e.response.get("Error", {})
             metadata_dict: dict[str, Any] = e.response.get("ResponseMetadata", {})
             error_code: str = str(error_dict.get("Code", "Unknown"))
-            request_id: str | None = str(metadata_dict.get("RequestId")) if metadata_dict.get("RequestId") else None
+            request_id: str | None = (
+                str(metadata_dict.get("RequestId")) if metadata_dict.get("RequestId") else None
+            )
 
             log_with_context(
                 logger,
@@ -469,7 +471,7 @@ resource "aws_s3_bucket_versioning" "example" {
 ```hcl
 resource "aws_iam_role" "example" {
   name = "example-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -480,10 +482,10 @@ resource "aws_iam_role" "example" {
       }
     }]
   })
-  
+
   # Recommended: Set maximum session duration
   max_session_duration = 3600
-  
+
   tags = {
     Environment = "production"
   }
@@ -537,25 +539,25 @@ resource "aws_security_group" "example" {
 ```hcl
 resource "aws_db_instance" "example" {
   identifier = "example-db"
-  
+
   # Enable encryption
   storage_encrypted = true
   kms_key_id       = aws_kms_key.db.arn
-  
+
   # Enable backups
   backup_retention_period = 7
   backup_window          = "03:00-04:00"
-  
+
   # Enable deletion protection
   deletion_protection = true
-  
+
   # Enable auto minor version upgrades
   auto_minor_version_upgrade = true
-  
+
   # Enable enhanced monitoring
   monitoring_interval = 60
   monitoring_role_arn = aws_iam_role.rds_monitoring.arn
-  
+
   # Enable CloudWatch logs
   enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
 }
@@ -696,15 +698,16 @@ resource "aws_db_instance" "example" {
                 "Empty Claude response",
                 retryable=False,
             )
-        content_list: list[dict[str, object]] = content_list_raw  # type: ignore[assignment]
+        content_list: list[dict[str, object]] = []
+        for item in content_list_raw:
+            if not isinstance(item, dict):
+                raise BedrockError(
+                    "Invalid Claude response format",
+                    retryable=False,
+                )
+            content_list.append(item)
 
-        first_content_raw: object = content_list[0]
-        if not isinstance(first_content_raw, dict):
-            raise BedrockError(
-                "Invalid Claude response format",
-                retryable=False,
-            )
-        first_content: dict[str, object] = first_content_raw  # type: ignore[assignment]
+        first_content: dict[str, object] = content_list[0]
         text: str = str(first_content.get("text", "")).strip()
 
         log_with_context(
@@ -751,11 +754,15 @@ resource "aws_db_instance" "example" {
             explanation_val: str = str(parsed.get("explanation", ""))
             confidence_val: str = str(parsed.get("confidence", "medium"))
             changed_attrs_raw: object = parsed.get("changed_attributes", [])
-            changed_attributes_val: list[str] = list(changed_attrs_raw) if isinstance(changed_attrs_raw, list) else []  # type: ignore[arg-type]
+            changed_attributes_val: list[str] = (
+                [str(item) for item in changed_attrs_raw]
+                if isinstance(changed_attrs_raw, list)
+                else []
+            )
             reasoning_val: str = str(parsed.get("reasoning", ""))
             breaking_changes_val: str = str(parsed.get("breaking_changes", "None identified"))
             additional_requirements_val: str = str(parsed.get("additional_requirements", "None"))
-            
+
             return RemediationFix(
                 fixed_config=fixed_config_val,
                 explanation=explanation_val,
@@ -777,4 +784,3 @@ resource "aws_db_instance" "example" {
                 f"Failed to parse RemediationFix: {e}",
                 retryable=False,
             ) from e
-

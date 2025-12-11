@@ -40,14 +40,12 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::EC2::Host": "aws_ec2_host",
     "AWS::EC2::PlacementGroup": "aws_placement_group",
     "AWS::EC2::KeyPair": "aws_key_pair",
-
     # Auto Scaling
     "AWS::AutoScaling::AutoScalingGroup": "aws_autoscaling_group",
     "AWS::AutoScaling::LaunchConfiguration": "aws_launch_configuration",
     "AWS::AutoScaling::LifecycleHook": "aws_autoscaling_lifecycle_hook",
     "AWS::AutoScaling::ScalingPolicy": "aws_autoscaling_policy",
     "AWS::AutoScaling::ScheduledAction": "aws_autoscaling_schedule",
-
     # Lambda
     "AWS::Lambda::Function": "aws_lambda_function",
     "AWS::Lambda::Alias": "aws_lambda_alias",
@@ -57,7 +55,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Lambda::Version": "aws_lambda_function",  # Versions are part of function
     "AWS::Lambda::Url": "aws_lambda_function_url",
     "AWS::Serverless::Function": "aws_lambda_function",  # SAM resource
-
     # ECS
     "AWS::ECS::Cluster": "aws_ecs_cluster",
     "AWS::ECS::Service": "aws_ecs_service",
@@ -65,20 +62,17 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::ECS::TaskSet": "aws_ecs_task_set",
     "AWS::ECS::CapacityProvider": "aws_ecs_capacity_provider",
     "AWS::ECS::ClusterCapacityProviderAssociations": "aws_ecs_cluster_capacity_providers",
-
     # EKS
     "AWS::EKS::Cluster": "aws_eks_cluster",
     "AWS::EKS::Nodegroup": "aws_eks_node_group",
     "AWS::EKS::FargateProfile": "aws_eks_fargate_profile",
     "AWS::EKS::Addon": "aws_eks_addon",
     "AWS::EKS::IdentityProviderConfig": "aws_eks_identity_provider_config",
-
     # Batch
     "AWS::Batch::ComputeEnvironment": "aws_batch_compute_environment",
     "AWS::Batch::JobQueue": "aws_batch_job_queue",
     "AWS::Batch::JobDefinition": "aws_batch_job_definition",
     "AWS::Batch::SchedulingPolicy": "aws_batch_scheduling_policy",
-
     # ==========================================================================
     # Storage Services
     # ==========================================================================
@@ -87,25 +81,20 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::S3::AccessPoint": "aws_s3_access_point",
     "AWS::S3::StorageLens": "aws_s3control_storage_lens_configuration",
     "AWS::S3Outposts::Bucket": "aws_s3outposts_bucket",
-
     # EFS
     "AWS::EFS::FileSystem": "aws_efs_file_system",
     "AWS::EFS::MountTarget": "aws_efs_mount_target",
     "AWS::EFS::AccessPoint": "aws_efs_access_point",
-
     # FSx
     "AWS::FSx::FileSystem": "aws_fsx_lustre_file_system",  # or other FSx types
     "AWS::FSx::Volume": "aws_fsx_openzfs_volume",
-
     # EBS
     "AWS::EC2::Volume": "aws_ebs_volume",
     "AWS::EC2::VolumeAttachment": "aws_volume_attachment",
-
     # Backup
     "AWS::Backup::BackupPlan": "aws_backup_plan",
     "AWS::Backup::BackupVault": "aws_backup_vault",
     "AWS::Backup::BackupSelection": "aws_backup_selection",
-
     # ==========================================================================
     # Database Services
     # ==========================================================================
@@ -119,11 +108,9 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::RDS::DBProxyTargetGroup": "aws_db_proxy_default_target_group",
     "AWS::RDS::GlobalCluster": "aws_rds_global_cluster",
     "AWS::RDS::EventSubscription": "aws_db_event_subscription",
-
     # DynamoDB
     "AWS::DynamoDB::Table": "aws_dynamodb_table",
     "AWS::DynamoDB::GlobalTable": "aws_dynamodb_global_table",
-
     # ElastiCache
     "AWS::ElastiCache::CacheCluster": "aws_elasticache_cluster",
     "AWS::ElastiCache::ReplicationGroup": "aws_elasticache_replication_group",
@@ -132,7 +119,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::ElastiCache::SecurityGroup": "aws_elasticache_security_group",
     "AWS::ElastiCache::User": "aws_elasticache_user",
     "AWS::ElastiCache::UserGroup": "aws_elasticache_user_group",
-
     # Redshift
     "AWS::Redshift::Cluster": "aws_redshift_cluster",
     "AWS::Redshift::ClusterSubnetGroup": "aws_redshift_subnet_group",
@@ -140,31 +126,26 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Redshift::ClusterSecurityGroup": "aws_redshift_security_group",
     "AWS::Redshift::EventSubscription": "aws_redshift_event_subscription",
     "AWS::Redshift::ScheduledAction": "aws_redshift_scheduled_action",
-
     # DocumentDB
     "AWS::DocDB::DBCluster": "aws_docdb_cluster",
     "AWS::DocDB::DBInstance": "aws_docdb_cluster_instance",
     "AWS::DocDB::DBSubnetGroup": "aws_docdb_subnet_group",
     "AWS::DocDB::DBClusterParameterGroup": "aws_docdb_cluster_parameter_group",
-
     # Neptune
     "AWS::Neptune::DBCluster": "aws_neptune_cluster",
     "AWS::Neptune::DBInstance": "aws_neptune_cluster_instance",
     "AWS::Neptune::DBSubnetGroup": "aws_neptune_subnet_group",
     "AWS::Neptune::DBClusterParameterGroup": "aws_neptune_cluster_parameter_group",
     "AWS::Neptune::DBParameterGroup": "aws_neptune_parameter_group",
-
     # MemoryDB
     "AWS::MemoryDB::Cluster": "aws_memorydb_cluster",
     "AWS::MemoryDB::SubnetGroup": "aws_memorydb_subnet_group",
     "AWS::MemoryDB::ParameterGroup": "aws_memorydb_parameter_group",
     "AWS::MemoryDB::User": "aws_memorydb_user",
     "AWS::MemoryDB::ACL": "aws_memorydb_acl",
-
     # Timestream
     "AWS::Timestream::Database": "aws_timestreamwrite_database",
     "AWS::Timestream::Table": "aws_timestreamwrite_table",
-
     # ==========================================================================
     # Networking Services
     # ==========================================================================
@@ -198,20 +179,17 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::EC2::FlowLog": "aws_flow_log",
     "AWS::EC2::DHCPOptions": "aws_vpc_dhcp_options",
     "AWS::EC2::VPCDHCPOptionsAssociation": "aws_vpc_dhcp_options_association",
-
     # ==========================================================================
     # Load Balancing
     # ==========================================================================
     # Classic ELB
     "AWS::ElasticLoadBalancing::LoadBalancer": "aws_elb",
-
     # ALB/NLB (v2)
     "AWS::ElasticLoadBalancingV2::LoadBalancer": "aws_lb",
     "AWS::ElasticLoadBalancingV2::TargetGroup": "aws_lb_target_group",
     "AWS::ElasticLoadBalancingV2::Listener": "aws_lb_listener",
     "AWS::ElasticLoadBalancingV2::ListenerRule": "aws_lb_listener_rule",
     "AWS::ElasticLoadBalancingV2::ListenerCertificate": "aws_lb_listener_certificate",
-
     # ==========================================================================
     # IAM & Security
     # ==========================================================================
@@ -226,28 +204,23 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::IAM::UserToGroupAddition": "aws_iam_user_group_membership",
     "AWS::IAM::OIDCProvider": "aws_iam_openid_connect_provider",
     "AWS::IAM::SAMLProvider": "aws_iam_saml_provider",
-
     # KMS
     "AWS::KMS::Key": "aws_kms_key",
     "AWS::KMS::Alias": "aws_kms_alias",
     "AWS::KMS::ReplicaKey": "aws_kms_replica_key",
-
     # Secrets Manager
     "AWS::SecretsManager::Secret": "aws_secretsmanager_secret",
     "AWS::SecretsManager::SecretTargetAttachment": "aws_secretsmanager_secret_version",
     "AWS::SecretsManager::RotationSchedule": "aws_secretsmanager_secret_rotation",
     "AWS::SecretsManager::ResourcePolicy": "aws_secretsmanager_secret_policy",
-
     # SSM Parameter Store
     "AWS::SSM::Parameter": "aws_ssm_parameter",
     "AWS::SSM::Document": "aws_ssm_document",
     "AWS::SSM::MaintenanceWindow": "aws_ssm_maintenance_window",
     "AWS::SSM::Association": "aws_ssm_association",
     "AWS::SSM::PatchBaseline": "aws_ssm_patch_baseline",
-
     # ACM
     "AWS::CertificateManager::Certificate": "aws_acm_certificate",
-
     # ==========================================================================
     # Monitoring & Logging
     # ==========================================================================
@@ -256,7 +229,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::CloudWatch::Dashboard": "aws_cloudwatch_dashboard",
     "AWS::CloudWatch::AnomalyDetector": "aws_cloudwatch_metric_alarm",  # Part of alarm
     "AWS::CloudWatch::MetricStream": "aws_cloudwatch_metric_stream",
-
     # CloudWatch Logs
     "AWS::Logs::LogGroup": "aws_cloudwatch_log_group",
     "AWS::Logs::LogStream": "aws_cloudwatch_log_stream",
@@ -264,7 +236,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Logs::SubscriptionFilter": "aws_cloudwatch_log_subscription_filter",
     "AWS::Logs::Destination": "aws_cloudwatch_log_destination",
     "AWS::Logs::ResourcePolicy": "aws_cloudwatch_log_resource_policy",
-
     # EventBridge (CloudWatch Events)
     "AWS::Events::Rule": "aws_cloudwatch_event_rule",
     "AWS::Events::EventBus": "aws_cloudwatch_event_bus",
@@ -272,29 +243,22 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Events::Archive": "aws_cloudwatch_event_archive",
     "AWS::Events::Connection": "aws_cloudwatch_event_connection",
     "AWS::Events::ApiDestination": "aws_cloudwatch_event_api_destination",
-
     # X-Ray
     "AWS::XRay::Group": "aws_xray_group",
     "AWS::XRay::SamplingRule": "aws_xray_sampling_rule",
-
     # ==========================================================================
     # Messaging Services
     # ==========================================================================
     "AWS::SNS::Topic": "aws_sns_topic",
     "AWS::SNS::TopicPolicy": "aws_sns_topic_policy",
     "AWS::SNS::Subscription": "aws_sns_topic_subscription",
-
     "AWS::SQS::Queue": "aws_sqs_queue",
     "AWS::SQS::QueuePolicy": "aws_sqs_queue_policy",
-
     "AWS::Kinesis::Stream": "aws_kinesis_stream",
     "AWS::Kinesis::StreamConsumer": "aws_kinesis_stream_consumer",
-
     "AWS::KinesisFirehose::DeliveryStream": "aws_kinesis_firehose_delivery_stream",
-
     "AWS::MSK::Cluster": "aws_msk_cluster",
     "AWS::MSK::Configuration": "aws_msk_configuration",
-
     # ==========================================================================
     # API Gateway
     # ==========================================================================
@@ -315,7 +279,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::ApiGateway::UsagePlanKey": "aws_api_gateway_usage_plan_key",
     "AWS::ApiGateway::ApiKey": "aws_api_gateway_api_key",
     "AWS::ApiGateway::VpcLink": "aws_api_gateway_vpc_link",
-
     # HTTP API (v2)
     "AWS::ApiGatewayV2::Api": "aws_apigatewayv2_api",
     "AWS::ApiGatewayV2::Stage": "aws_apigatewayv2_stage",
@@ -325,7 +288,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::ApiGatewayV2::Deployment": "aws_apigatewayv2_deployment",
     "AWS::ApiGatewayV2::DomainName": "aws_apigatewayv2_domain_name",
     "AWS::ApiGatewayV2::VpcLink": "aws_apigatewayv2_vpc_link",
-
     # ==========================================================================
     # CDN & DNS
     # ==========================================================================
@@ -337,17 +299,14 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::CloudFront::ResponseHeadersPolicy": "aws_cloudfront_response_headers_policy",
     "AWS::CloudFront::Function": "aws_cloudfront_function",
     "AWS::CloudFront::RealtimeLogConfig": "aws_cloudfront_realtime_log_config",
-
     "AWS::Route53::HostedZone": "aws_route53_zone",
     "AWS::Route53::RecordSet": "aws_route53_record",
     "AWS::Route53::RecordSetGroup": "aws_route53_record",
     "AWS::Route53::HealthCheck": "aws_route53_health_check",
     "AWS::Route53Resolver::ResolverEndpoint": "aws_route53_resolver_endpoint",
     "AWS::Route53Resolver::ResolverRule": "aws_route53_resolver_rule",
-
     "AWS::ACM::Certificate": "aws_acm_certificate",
     "AWS::ACMPCA::CertificateAuthority": "aws_acmpca_certificate_authority",
-
     # ==========================================================================
     # Cognito
     # ==========================================================================
@@ -361,7 +320,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Cognito::UserPoolUserToGroupAttachment": "aws_cognito_user_in_group",
     "AWS::Cognito::IdentityPool": "aws_cognito_identity_pool",
     "AWS::Cognito::IdentityPoolRoleAttachment": "aws_cognito_identity_pool_roles_attachment",
-
     # ==========================================================================
     # Step Functions & Workflow
     # ==========================================================================
@@ -369,7 +327,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::StepFunctions::Activity": "aws_sfn_activity",
     "AWS::Scheduler::Schedule": "aws_scheduler_schedule",
     "AWS::Scheduler::ScheduleGroup": "aws_scheduler_schedule_group",
-
     # ==========================================================================
     # WAF & Security
     # ==========================================================================
@@ -378,22 +335,18 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::WAFv2::RuleGroup": "aws_wafv2_rule_group",
     "AWS::WAFv2::IPSet": "aws_wafv2_ip_set",
     "AWS::WAFv2::RegexPatternSet": "aws_wafv2_regex_pattern_set",
-
     # Shield
     "AWS::Shield::Protection": "aws_shield_protection",
     "AWS::Shield::ProtectionGroup": "aws_shield_protection_group",
-
     # GuardDuty
     "AWS::GuardDuty::Detector": "aws_guardduty_detector",
     "AWS::GuardDuty::Filter": "aws_guardduty_filter",
     "AWS::GuardDuty::IPSet": "aws_guardduty_ipset",
     "AWS::GuardDuty::ThreatIntelSet": "aws_guardduty_threatintelset",
     "AWS::GuardDuty::Member": "aws_guardduty_member",
-
     # Security Hub
     "AWS::SecurityHub::Hub": "aws_securityhub_account",
     "AWS::SecurityHub::Standard": "aws_securityhub_standards_subscription",
-
     # Config
     "AWS::Config::ConfigRule": "aws_config_config_rule",
     "AWS::Config::ConfigurationRecorder": "aws_config_configuration_recorder",
@@ -401,34 +354,27 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Config::ConformancePack": "aws_config_conformance_pack",
     "AWS::Config::AggregationAuthorization": "aws_config_aggregate_authorization",
     "AWS::Config::ConfigurationAggregator": "aws_config_configuration_aggregator",
-
     # ==========================================================================
     # CloudFormation & Deployment
     # ==========================================================================
     "AWS::CloudFormation::Stack": "aws_cloudformation_stack",
     "AWS::CloudFormation::StackSet": "aws_cloudformation_stack_set",
-
     "AWS::CodeBuild::Project": "aws_codebuild_project",
     "AWS::CodeBuild::SourceCredential": "aws_codebuild_source_credential",
-
     "AWS::CodePipeline::Pipeline": "aws_codepipeline",
     "AWS::CodePipeline::Webhook": "aws_codepipeline_webhook",
-
     "AWS::CodeDeploy::Application": "aws_codedeploy_app",
     "AWS::CodeDeploy::DeploymentGroup": "aws_codedeploy_deployment_group",
     "AWS::CodeDeploy::DeploymentConfig": "aws_codedeploy_deployment_config",
-
     "AWS::ECR::Repository": "aws_ecr_repository",
     "AWS::ECR::RegistryPolicy": "aws_ecr_registry_policy",
     "AWS::ECR::ReplicationConfiguration": "aws_ecr_replication_configuration",
-
     # ==========================================================================
     # Analytics
     # ==========================================================================
     "AWS::Athena::WorkGroup": "aws_athena_workgroup",
     "AWS::Athena::DataCatalog": "aws_athena_data_catalog",
     "AWS::Athena::NamedQuery": "aws_athena_named_query",
-
     "AWS::Glue::Database": "aws_glue_catalog_database",
     "AWS::Glue::Table": "aws_glue_catalog_table",
     "AWS::Glue::Crawler": "aws_glue_crawler",
@@ -436,17 +382,14 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::Glue::Trigger": "aws_glue_trigger",
     "AWS::Glue::Connection": "aws_glue_connection",
     "AWS::Glue::SecurityConfiguration": "aws_glue_security_configuration",
-
     "AWS::EMR::Cluster": "aws_emr_cluster",
     "AWS::EMR::SecurityConfiguration": "aws_emr_security_configuration",
-
     "AWS::QuickSight::Analysis": "aws_quicksight_analysis",
     "AWS::QuickSight::Dashboard": "aws_quicksight_dashboard",
     "AWS::QuickSight::DataSet": "aws_quicksight_data_set",
     "AWS::QuickSight::DataSource": "aws_quicksight_data_source",
     "AWS::QuickSight::Group": "aws_quicksight_group",
     "AWS::QuickSight::User": "aws_quicksight_user",
-
     # ==========================================================================
     # Machine Learning
     # ==========================================================================
@@ -458,10 +401,8 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::SageMaker::Domain": "aws_sagemaker_domain",
     "AWS::SageMaker::UserProfile": "aws_sagemaker_user_profile",
     "AWS::SageMaker::FeatureGroup": "aws_sagemaker_feature_group",
-
     "AWS::Bedrock::Agent": "aws_bedrockagent_agent",
     "AWS::Bedrock::KnowledgeBase": "aws_bedrockagent_knowledge_base",
-
     # ==========================================================================
     # Application Integration
     # ==========================================================================
@@ -470,7 +411,6 @@ AWS_TO_TERRAFORM_TYPE_MAP: dict[str, str] = {
     "AWS::AppSync::Resolver": "aws_appsync_resolver",
     "AWS::AppSync::FunctionConfiguration": "aws_appsync_function",
     "AWS::AppSync::ApiKey": "aws_appsync_api_key",
-
     "AWS::EventSchemas::Registry": "aws_schemas_registry",
     "AWS::EventSchemas::Schema": "aws_schemas_schema",
     "AWS::EventSchemas::Discoverer": "aws_schemas_discoverer",
@@ -556,4 +496,3 @@ def is_supported_type(aws_type: str) -> bool:
         True if the type has a known Terraform mapping
     """
     return aws_type in AWS_TO_TERRAFORM_TYPE_MAP
-

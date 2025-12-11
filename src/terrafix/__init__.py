@@ -52,4 +52,3 @@ __all__ = [
     "__version__",
     "__author__",
 ]
-

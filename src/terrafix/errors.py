@@ -399,4 +399,3 @@ class TerraformValidationError(TerraFixError):
         super().__init__(message, retryable=False, context=context)
         self.validation_errors = validation_errors or []
         self.warnings = warnings or []
-

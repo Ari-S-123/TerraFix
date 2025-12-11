@@ -28,6 +28,8 @@ Usage:
     metrics = metrics_collector.get_metrics()
 """
 
+from __future__ import annotations
+
 import statistics
 import threading
 import time
@@ -86,7 +88,7 @@ class Timer:
     def __init__(
         self,
         name: str,
-        collector: "MetricsCollector",
+        collector: MetricsCollector,
         labels: dict[str, str] | None = None,
     ) -> None:
         """
@@ -103,7 +105,7 @@ class Timer:
         self.start_time: float = 0.0
         self.duration: float = 0.0
 
-    def __enter__(self) -> "Timer":
+    def __enter__(self) -> Timer:
         """Start the timer."""
         self.start_time = time.perf_counter()
         return self
@@ -149,10 +151,10 @@ class MetricsCollector:
         _start_time: When the collector was initialized
     """
 
-    _instance: "MetricsCollector | None" = None
+    _instance: MetricsCollector | None = None
     _lock_class: threading.Lock = threading.Lock()
 
-    def __new__(cls) -> "MetricsCollector":
+    def __new__(cls) -> MetricsCollector:
         """Singleton pattern implementation."""
         with cls._lock_class:
             if cls._instance is None:
@@ -168,7 +170,9 @@ class MetricsCollector:
 
         self._counters: dict[tuple[str, tuple[tuple[str, str], ...]], int] = defaultdict(int)
         self._gauges: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
-        self._timings: dict[tuple[str, tuple[tuple[str, str], ...]], list[float]] = defaultdict(list)
+        self._timings: dict[tuple[str, tuple[tuple[str, str], ...]], list[float]] = defaultdict(
+            list
+        )
         self._lock: threading.Lock = threading.Lock()
         self._start_time: datetime = datetime.now(UTC)
         self._initialized: bool = True
@@ -402,14 +406,14 @@ class MetricsCollector:
                     counters[name] = value
 
             # Format gauges
-            gauges: dict[str, Any] = {}
-            for (name, labels_tuple), value in self._gauges.items():
+            gauges: dict[str, float] = {}
+            for (name, labels_tuple), gauge_value in self._gauges.items():
                 if labels_tuple:
                     labels_dict = dict(labels_tuple)
                     label_str = ",".join(f"{k}={v}" for k, v in labels_dict.items())
-                    gauges[f"{name}{{{label_str}}}"] = value
+                    gauges[f"{name}{{{label_str}}}"] = gauge_value
                 else:
-                    gauges[name] = value
+                    gauges[name] = gauge_value
 
             # Format timings
             timings: dict[str, Any] = {}
@@ -483,4 +487,3 @@ class MetricNames:
     LAST_POLL_TIMESTAMP = "last_poll_timestamp"
 
     # Timings are handled by StageTimer enum
-

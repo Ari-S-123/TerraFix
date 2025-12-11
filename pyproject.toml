@@ -33,6 +33,8 @@ build-backend = "setuptools.build_meta"
 [tool.ruff]
 target-version = "py314"
 line-length = 100
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -48,7 +50,7 @@ ignore = [
     "E501", # line too long (handled by formatter)
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["terrafix"]
 
 [tool.mypy]

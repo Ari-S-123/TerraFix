@@ -114,9 +114,12 @@ class SecureGitClient:
 
             # Build clone command
             cmd = [
-                "git", "clone",
-                "--depth", str(depth),
-                "--branch", branch,
+                "git",
+                "clone",
+                "--depth",
+                str(depth),
+                "--branch",
+                branch,
                 "--single-branch",
                 clone_url,
                 str(target_path),
@@ -164,7 +167,7 @@ class SecureGitClient:
 
             return target_path
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as err:
             log_with_context(
                 logger,
                 "error",
@@ -174,9 +177,9 @@ class SecureGitClient:
             raise GitHubError(
                 f"Git clone timed out for {repo_full_name}",
                 retryable=True,
-            )
+            ) from err
 
-        except FileNotFoundError:
+        except FileNotFoundError as err:
             log_with_context(
                 logger,
                 "error",
@@ -185,7 +188,7 @@ class SecureGitClient:
             raise GitHubError(
                 "Git command not found. Please install git.",
                 retryable=False,
-            )
+            ) from err
 
         finally:
             # Always clean up credential script
@@ -224,7 +227,7 @@ echo "password={self._token}"
 
         # Create temporary file with restricted permissions
         fd, script_path = tempfile.mkstemp(suffix=suffix, prefix="terrafix_cred_")
-        
+
         try:
             # Write script content
             _ = os.write(fd, script_content.encode("utf-8"))
@@ -281,6 +284,7 @@ echo "password={self._token}"
 
         # Also redact any x-access-token patterns
         import re
+
         sanitized = re.sub(
             r"x-access-token:[^\s@]+",
             "x-access-token:[REDACTED]",
@@ -340,12 +344,11 @@ echo "password={self._token}"
                 branch=branch,
             )
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as err:
             raise GitHubError(
                 "Git pull timed out",
                 retryable=True,
-            )
+            ) from err
 
         finally:
             self._cleanup_credential_script(cred_script_path)
-

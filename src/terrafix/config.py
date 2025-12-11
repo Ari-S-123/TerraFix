@@ -275,7 +275,7 @@ class Settings(BaseSettings):
                     f"GITHUB_REPO_MAPPING is not valid JSON: {e}",
                     config_key="GITHUB_REPO_MAPPING",
                     reason=str(e),
-                )
+                ) from e
         return {"default": ""}
 
     def get_repo_for_resource(self, resource_arn: str) -> str | None:
@@ -351,8 +351,16 @@ def get_settings() -> Settings:
         300
     """
     try:
-        # Pydantic BaseSettings loads required fields from environment variables
-        settings = Settings()  # pyright: ignore[reportCallIssue]
+        required_env_vanta: str = os.getenv("VANTA_API_TOKEN", "")
+        required_env_github: str = os.getenv("GITHUB_TOKEN", "")
+        required_env_region: str = os.getenv("AWS_REGION", "")
+
+        # Pydantic BaseSettings loads remaining fields from environment variables at runtime.
+        settings = Settings(
+            vanta_api_token=required_env_vanta,
+            github_token=required_env_github,
+            aws_region=required_env_region,
+        )  # pyright: ignore[reportCallIssue]
         settings.validate_boto3_credentials()
         return settings
     except Exception as e:
@@ -362,4 +370,3 @@ def get_settings() -> Settings:
             f"Failed to load configuration: {e}",
             reason=str(e),
         ) from e
-

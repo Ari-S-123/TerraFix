@@ -21,6 +21,8 @@ Usage:
         store.mark_processed(failure_hash, pr_url)
 """
 
+from __future__ import annotations
+
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -619,7 +621,7 @@ class StateStore:
                     error=str(e),
                 )
 
-    def __enter__(self) -> "StateStore":
+    def __enter__(self) -> StateStore:
         """Context manager entry."""
         self._ensure_connection()
         return self
@@ -632,4 +634,3 @@ class StateStore:
     ) -> None:
         """Context manager exit."""
         self.close()
-

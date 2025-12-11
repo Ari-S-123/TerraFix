@@ -28,6 +28,7 @@ Usage:
     )
 """
 
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -289,10 +290,12 @@ def _process_failure_with_retry(
                 raise
 
             # Calculate backoff with exponential increase and jitter
-            backoff: float = float(min(
-                INITIAL_BACKOFF_SECONDS * (2**attempt),
-                MAX_BACKOFF_SECONDS,
-            ))
+            backoff: float = float(
+                min(
+                    INITIAL_BACKOFF_SECONDS * (2**attempt),
+                    MAX_BACKOFF_SECONDS,
+                )
+            )
 
             # Track retry metrics
             metrics_collector.increment(MetricNames.RETRIES_TOTAL)
@@ -503,8 +506,22 @@ def _process_failure_once(
                 warning=warning,
             )
 
-        # Calculate relative file path from repo root
-        relative_file_path = Path(file_path).relative_to(repo_path)
+        # Calculate relative file path from repo root (tolerate mixed path types/roots)
+        file_path_obj = Path(file_path).resolve()
+        repo_root = Path(repo_path).resolve()
+
+        # Some test doubles and Windows/Posix path combinations can point outside
+        # the cloned repo (e.g., "/tmp/repo/s3.tf" vs "C:\\...\\repo"). We want
+        # a best-effort relative path but must never raise here because that
+        # would block remediation.
+        try:
+            relative_file_path = file_path_obj.relative_to(repo_root)
+        except Exception:
+            try:
+                relative_file_path = Path(os.path.relpath(file_path_obj, repo_root))
+            except Exception:
+                # Final fallback: just use the filename so PR creation can proceed.
+                relative_file_path = Path(file_path_obj.name)
 
         # Create PR
         log_with_context(
@@ -574,4 +591,3 @@ def _validate_terraform_fix(
             formatted_content=content,
             warnings=[f"Validation skipped: {e}"],
         )
-

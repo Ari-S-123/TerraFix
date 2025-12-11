@@ -24,12 +24,12 @@ Usage:
 """
 
 import random
-from collections.abc import Generator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 
 class FailureInjector:
@@ -101,7 +101,7 @@ class FailureInjector:
         self._failure_count = 0
 
     @contextmanager
-    def inject_bedrock_throttling(self) -> Generator[None, None, None]:
+    def inject_bedrock_throttling(self) -> Iterator[None]:
         """
         Inject Bedrock throttling errors.
 
@@ -141,7 +141,7 @@ class FailureInjector:
             yield
 
     @contextmanager
-    def inject_github_rate_limit(self) -> Generator[None, None, None]:
+    def inject_github_rate_limit(self) -> Iterator[None]:
         """
         Inject GitHub API rate limiting errors.
 
@@ -177,7 +177,7 @@ class FailureInjector:
             yield
 
     @contextmanager
-    def inject_git_timeout(self) -> Generator[None, None, None]:
+    def inject_git_timeout(self) -> Iterator[None]:
         """
         Inject Git clone timeout errors.
 
@@ -201,7 +201,7 @@ class FailureInjector:
             yield
 
     @contextmanager
-    def inject_redis_failure(self) -> Generator[None, None, None]:
+    def inject_redis_failure(self) -> Iterator[None]:
         """
         Inject Redis connection failures.
 
@@ -227,7 +227,7 @@ class FailureInjector:
             yield
 
     @contextmanager
-    def inject_network_error(self) -> Generator[None, None, None]:
+    def inject_network_error(self) -> Iterator[None]:
         """
         Inject generic network errors.
 
@@ -252,7 +252,7 @@ class FailureInjector:
             yield
 
     @contextmanager
-    def inject_all_failures(self) -> Generator[None, None, None]:
+    def inject_all_failures(self) -> Iterator[None]:
         """
         Inject all failure types simultaneously.
 
@@ -275,4 +275,3 @@ class FailureInjector:
             self.inject_network_error(),
         ):
             yield
-

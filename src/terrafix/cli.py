@@ -130,7 +130,7 @@ def cmd_process_once(args: argparse.Namespace, settings: Settings) -> int:
         print(f"File not found: {failure_path}", file=sys.stderr)
         return 1
 
-    with open(failure_path, "r") as f:
+    with open(failure_path, encoding="utf-8") as f:
         failure_data: dict[str, object] = json.load(f)
 
     try:
@@ -259,4 +259,3 @@ def cmd_cleanup(args: argparse.Namespace, settings: Settings) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

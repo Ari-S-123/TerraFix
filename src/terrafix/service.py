@@ -311,7 +311,7 @@ def run_service_loop(
             # Update last_check to current time
             last_check = datetime.now(UTC)
 
-                # Periodic statistics logging (every 10 cycles)
+            # Periodic statistics logging (every 10 cycles)
             # Note: Redis handles TTL-based expiration automatically
             cleanup_counter += 1
             if cleanup_counter >= 10:
@@ -480,4 +480,3 @@ def process_failures_concurrent(
 
 if __name__ == "__main__":
     sys.exit(main())
-

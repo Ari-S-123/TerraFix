@@ -242,7 +242,9 @@ class SyntheticFailureGenerator:
             resource_type = self._random.choice(list(self.FAILURE_TEMPLATES.keys()))
 
         # Get templates for this resource type
-        templates = self.FAILURE_TEMPLATES.get(resource_type, self.FAILURE_TEMPLATES["AWS::S3::Bucket"])
+        templates = self.FAILURE_TEMPLATES.get(
+            resource_type, self.FAILURE_TEMPLATES["AWS::S3::Bucket"]
+        )
         template = self._random.choice(templates)
 
         # Generate ARN and resource ID
@@ -277,7 +279,7 @@ class SyntheticFailureGenerator:
     async def generate_stream(
         self,
         config: ProfileConfig,
-    ) -> AsyncGenerator[Failure, None]:
+    ) -> AsyncGenerator[Failure]:
         """
         Generate a stream of failures according to the profile configuration.
 
@@ -295,7 +297,7 @@ class SyntheticFailureGenerator:
             ...     await process_failure(failure)
         """
         start_time = time.time()
-        elapsed = 0
+        elapsed: float = 0.0
 
         while elapsed < config.duration_seconds:
             # Calculate failures for this interval
@@ -328,4 +330,3 @@ class SyntheticFailureGenerator:
         severities = list(distribution.keys())
         weights = list(distribution.values())
         return self._random.choices(severities, weights=weights, k=1)[0]
-

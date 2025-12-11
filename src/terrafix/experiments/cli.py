@@ -153,7 +153,7 @@ Examples:
     )
 
     # List presets command
-    list_parser = subparsers.add_parser("list-presets", help="List available presets")
+    subparsers.add_parser("list-presets", help="List available presets")
 
     return parser.parse_args()
 
@@ -304,4 +304,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -25,17 +25,20 @@ Usage:
         status_provider=get_status
     )
     server.start()
-    
+
     # ... run main application ...
-    
+
     server.stop()
 """
 
+from __future__ import annotations
+
 import json
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import TracebackType
-from typing import Callable, override
+from typing import ClassVar, cast, overload, override
 
 from terrafix.logging_config import get_logger, log_with_context
 
@@ -55,8 +58,8 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     """
 
     # Class-level references to check functions (set by HealthCheckServer)
-    readiness_check: Callable[[], bool] | None = None
-    status_provider: Callable[[], dict[str, object]] | None = None
+    readiness_check: ClassVar[Callable[[HealthCheckHandler], bool] | None] = None
+    status_provider: ClassVar[Callable[[HealthCheckHandler], dict[str, object]] | None] = None
 
     def do_GET(self) -> None:
         """
@@ -80,10 +83,13 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                     else:
                         self._send_json_response(503, {"status": "not ready"})
                 except Exception as e:
-                    self._send_json_response(503, {
-                        "status": "not ready",
-                        "error": str(e),
-                    })
+                    self._send_json_response(
+                        503,
+                        {
+                            "status": "not ready",
+                            "error": str(e),
+                        },
+                    )
             else:
                 # No readiness check configured, assume ready
                 self._send_json_response(200, {"status": "ready"})
@@ -145,11 +151,27 @@ class HealthCheckServer:
         thread: Background thread running the server
     """
 
+    @overload
+    def __init__(
+        self,
+        port: int = 8080,
+        readiness_check: None = None,
+        status_provider: None = None,
+    ) -> None: ...
+
+    @overload
     def __init__(
         self,
         port: int = 8080,
         readiness_check: Callable[[], bool] | None = None,
         status_provider: Callable[[], dict[str, object]] | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        port: int = 8080,
+        readiness_check: object | None = None,
+        status_provider: object | None = None,
     ) -> None:
         """
         Initialize health check server.
@@ -170,16 +192,47 @@ class HealthCheckServer:
             >>> server.start()
         """
         self.port: int = port
-        self._readiness_check: Callable[[], bool] | None = readiness_check
-        self._status_provider: Callable[[], dict[str, object]] | None = status_provider
+
+        if readiness_check is None:
+            readiness_cb: Callable[[], bool] | None = None
+        elif callable(readiness_check):
+            readiness_cb = cast(Callable[[], bool], readiness_check)
+        else:
+            msg = "readiness_check must be callable when provided"
+            raise TypeError(msg)
+
+        if status_provider is None:
+            status_cb: Callable[[], dict[str, object]] | None = None
+        elif callable(status_provider):
+            status_cb = cast(Callable[[], dict[str, object]], status_provider)
+        else:
+            msg = "status_provider must be callable when provided"
+            raise TypeError(msg)
+
+        self._readiness_check: Callable[[], bool] | None = readiness_cb
+        self._status_provider: Callable[[], dict[str, object]] | None = status_cb
 
         # Configure handler class with callbacks
         # Note: These are stored as class attributes for access by handler instances
         # The callables don't have 'self' since they're externally provided functions
-        # pyright does not allow assigning callables to class attributes that could
-        # be interpreted as methods, so we use setattr for dynamic assignment
-        setattr(HealthCheckHandler, "readiness_check", readiness_check)
-        setattr(HealthCheckHandler, "status_provider", status_provider)
+        # Assign callbacks for handler instances, wrapping to absorb the bound self
+        if readiness_cb is not None:
+
+            def _readiness_wrapper(_: HealthCheckHandler) -> bool:
+                return readiness_cb()
+
+            HealthCheckHandler.readiness_check = _readiness_wrapper
+        else:
+            HealthCheckHandler.readiness_check = None
+
+        if status_cb is not None:
+
+            def _status_wrapper(_: HealthCheckHandler) -> dict[str, object]:
+                return status_cb()
+
+            HealthCheckHandler.status_provider = _status_wrapper
+        else:
+            HealthCheckHandler.status_provider = None
 
         self.server: HTTPServer | None = None
         self.thread: threading.Thread | None = None
@@ -255,7 +308,7 @@ class HealthCheckServer:
             "Health check server stopped",
         )
 
-    def __enter__(self) -> "HealthCheckServer":
+    def __enter__(self) -> HealthCheckServer:
         """Context manager entry - starts the server."""
         self.start()
         return self
@@ -268,4 +321,3 @@ class HealthCheckServer:
     ) -> None:
         """Context manager exit - stops the server."""
         self.stop()
-

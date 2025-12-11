@@ -145,17 +145,19 @@ class VantaClient:
             ...     client_id="your_client_id",
             ...     client_secret="your_client_secret"
             ... )
-            >>> 
+            >>>
             >>> # Using direct token (legacy)
             >>> client = VantaClient(api_token="vanta_oauth_token")
         """
         self.base_url: str = base_url.rstrip("/")
         self.session: requests.Session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "TerraFix/0.1.0",
-        })
+        self.session.headers.update(
+            {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "TerraFix/0.1.0",
+            }
+        )
 
         # Store credentials for token refresh
         self._client_id: str | None = client_id
@@ -307,17 +309,23 @@ class VantaClient:
             if frameworks:
                 params["frameworks"] = ",".join(frameworks)
 
+            response_status: int | None = None
+            response_body: str | None = None
+
             try:
                 response = self.session.get(
                     f"{self.base_url}{self.TESTS_ENDPOINT}",
                     params=params,
                     timeout=30,
                 )
+                response_status = response.status_code
+                response_body = response.text
                 response.raise_for_status()
 
             except requests.HTTPError as e:
-                status_code = e.response.status_code if e.response else None
-                response_body = e.response.text if e.response else None
+                # Always derive status/body from the HTTP response when available.
+                status_code = e.response.status_code if e.response is not None else response_status
+                body = e.response.text if e.response is not None else response_body
 
                 # Handle 401 by attempting re-authentication
                 if status_code == 401 and self._client_id and self._client_secret:
@@ -347,13 +355,13 @@ class VantaClient:
                     "error",
                     "Vanta API request failed",
                     status_code=status_code,
-                    response_body=response_body[:500] if response_body else None,
+                    response_body=body[:500] if body else None,
                 )
 
                 raise VantaApiError(
                     f"Vanta API request failed: {e}",
                     status_code=status_code,
-                    response_body=response_body,
+                    response_body=body,
                     retryable=(status_code is None or status_code >= 500),
                 ) from e
 
@@ -376,8 +384,7 @@ class VantaClient:
             # Filter by timestamp if provided
             if since:
                 batch = [
-                    t for t in batch
-                    if self._parse_timestamp(str(t.get("failed_at", ""))) > since
+                    t for t in batch if self._parse_timestamp(str(t.get("failed_at", ""))) > since
                 ]
 
             # Convert to Failure objects with enrichment

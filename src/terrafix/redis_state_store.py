@@ -14,7 +14,7 @@ Usage:
     from terrafix.redis_state_store import RedisStateStore
 
     store = RedisStateStore(redis_url="redis://localhost:6379/0")
-    
+
     if store.check_and_claim(failure_hash):
         # Process failure...
         store.mark_completed(failure_hash, pr_url)
@@ -23,7 +23,10 @@ Usage:
         pass
 """
 
+from __future__ import annotations
+
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import Enum
 from types import TracebackType
@@ -98,8 +101,14 @@ class RedisStateStore:
         """
         try:
             # Redis client with decode_responses=True returns str instead of bytes
-            # Type annotation: Using Any due to redis-py complex generic typing
-            self.client: Redis = redis.from_url(  # type: ignore[type-arg]
+            from_url_fn: Callable[..., Redis] | None = getattr(redis, "from_url", None)
+            if from_url_fn is None:
+                raise StateStoreError(
+                    "redis.from_url is not available",
+                    operation="connect",
+                )
+
+            self.client: Redis = from_url_fn(
                 redis_url,
                 decode_responses=True,
                 socket_connect_timeout=5,
@@ -187,11 +196,13 @@ class RedisStateStore:
             ...     pass
         """
         key = self._make_key(failure_hash)
-        record = json.dumps({
-            "status": FailureStatus.IN_PROGRESS.value,
-            "claimed_at": datetime.now(UTC).isoformat(),
-            "updated_at": datetime.now(UTC).isoformat(),
-        })
+        record = json.dumps(
+            {
+                "status": FailureStatus.IN_PROGRESS.value,
+                "claimed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        )
 
         try:
             # SET NX returns True only if key didn't exist
@@ -307,13 +318,15 @@ class RedisStateStore:
             >>> store.mark_in_progress(hash, "test-123", "arn:aws:s3:::bucket")
         """
         key = self._make_key(failure_hash)
-        record = json.dumps({
-            "status": FailureStatus.IN_PROGRESS.value,
-            "test_id": test_id,
-            "resource_arn": resource_arn,
-            "claimed_at": datetime.now(UTC).isoformat(),
-            "updated_at": datetime.now(UTC).isoformat(),
-        })
+        record = json.dumps(
+            {
+                "status": FailureStatus.IN_PROGRESS.value,
+                "test_id": test_id,
+                "resource_arn": resource_arn,
+                "claimed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        )
 
         try:
             _ = self.client.set(key, record, ex=self.ttl_seconds)
@@ -368,14 +381,16 @@ class RedisStateStore:
             existing: str | None = cast(str | None, self.client.get(key))
             existing_data: dict[str, str | None] = json.loads(existing) if existing else {}
 
-            record = json.dumps({
-                **existing_data,
-                "status": FailureStatus.COMPLETED.value,
-                "pr_url": pr_url,
-                "completed_at": datetime.now(UTC).isoformat(),
-                "updated_at": datetime.now(UTC).isoformat(),
-                "last_error": None,
-            })
+            record = json.dumps(
+                {
+                    **existing_data,
+                    "status": FailureStatus.COMPLETED.value,
+                    "pr_url": pr_url,
+                    "completed_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                    "last_error": None,
+                }
+            )
 
             _ = self.client.set(key, record, ex=self.ttl_seconds)
 
@@ -431,13 +446,15 @@ class RedisStateStore:
             # Truncate error message to prevent excessive storage
             truncated_error = error[:1000] if error else "Unknown error"
 
-            record = json.dumps({
-                **existing_data,
-                "status": FailureStatus.FAILED.value,
-                "last_error": truncated_error,
-                "failed_at": datetime.now(UTC).isoformat(),
-                "updated_at": datetime.now(UTC).isoformat(),
-            })
+            record = json.dumps(
+                {
+                    **existing_data,
+                    "status": FailureStatus.FAILED.value,
+                    "last_error": truncated_error,
+                    "failed_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
             _ = self.client.set(key, record, ex=self.ttl_seconds)
 
@@ -617,7 +634,7 @@ class RedisStateStore:
                 error=str(e),
             )
 
-    def __enter__(self) -> "RedisStateStore":
+    def __enter__(self) -> RedisStateStore:
         """Context manager entry."""
         return self
 
@@ -629,4 +646,3 @@ class RedisStateStore:
     ) -> None:
         """Context manager exit."""
         self.close()
-

@@ -41,10 +41,11 @@ import json
 import logging
 import sys
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from types import TracebackType
-from typing import Callable, override
+from typing import override
 
 # Context variable for correlation ID that propagates through async/sync calls
 _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -324,4 +325,3 @@ class LogContext:
             exc_tb: Exception traceback if raised
         """
         clear_correlation_id()
-

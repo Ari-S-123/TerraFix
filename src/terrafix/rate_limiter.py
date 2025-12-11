@@ -234,4 +234,3 @@ Rate limiter for Vanta integration API endpoints.
 Limit: 20 requests per minute with burst of 5.
 Use this for integration-specific endpoints.
 """
-

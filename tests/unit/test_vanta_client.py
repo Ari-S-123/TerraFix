@@ -52,7 +52,6 @@ class TestFailureModel:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
-            resource_id="res-123",
         )
 
         assert failure.current_state == {}

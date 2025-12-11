@@ -167,4 +167,3 @@ PRESETS: dict[str, ProfileConfig] = {
         repo_size="large",
     ),
 }
-
