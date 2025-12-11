@@ -81,7 +81,10 @@ class Failure(BaseModel):
         default_factory=dict,
         description="Required configuration for compliance",
     )
-    resource_id: str | None = Field(None, description="Vanta resource ID")
+    resource_id: str | None = Field(
+        default=None,
+        description="Optional Vanta resource ID used for enrichment when present",
+    )
     resource_details: dict[str, object] = Field(
         default_factory=dict,
         description="Additional resource metadata",
