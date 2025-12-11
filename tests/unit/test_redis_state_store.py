@@ -5,10 +5,6 @@ Tests cover state operations, deduplication, status tracking,
 and error handling using fakeredis.
 """
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from terrafix.redis_state_store import FailureStatus, RedisStateStore
 
 
@@ -17,9 +13,11 @@ class TestRedisStateStoreInit:
 
     def test_init_with_mock_redis(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test initialization with mocked Redis."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         assert store.key_prefix == "terrafix:"
@@ -27,9 +25,11 @@ class TestRedisStateStoreInit:
 
     def test_init_with_custom_prefix(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test initialization with custom key prefix."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(
             redis_url="redis://localhost:6379/0",
             key_prefix="custom:",
@@ -45,9 +45,11 @@ class TestCheckAndClaim:
 
     def test_check_and_claim_new_failure(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test claiming a new failure returns True."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         result = store.check_and_claim("new_hash_123")
@@ -56,9 +58,11 @@ class TestCheckAndClaim:
 
     def test_check_and_claim_existing_failure(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test claiming an existing failure returns False."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         # First claim succeeds
@@ -75,9 +79,11 @@ class TestIsAlreadyProcessed:
 
     def test_not_processed_returns_false(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that non-existent failure returns False."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         result = store.is_already_processed("nonexistent_hash")
@@ -86,13 +92,15 @@ class TestIsAlreadyProcessed:
 
     def test_in_progress_returns_true(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that in-progress failure returns True."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         # Claim the failure (sets IN_PROGRESS)
-        store.check_and_claim("hash_789")
+        _ = store.check_and_claim("hash_789")
 
         result = store.is_already_processed("hash_789")
 
@@ -100,13 +108,15 @@ class TestIsAlreadyProcessed:
 
     def test_completed_returns_true(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that completed failure returns True."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         # Claim and complete
-        store.check_and_claim("hash_completed")
+        _ = store.check_and_claim("hash_completed")
         store.mark_processed("hash_completed", "https://github.com/pull/1")
 
         result = store.is_already_processed("hash_completed")
@@ -119,9 +129,11 @@ class TestMarkInProgress:
 
     def test_mark_in_progress_sets_status(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test marking failure as in progress."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         store.mark_in_progress(
@@ -139,12 +151,14 @@ class TestMarkProcessed:
 
     def test_mark_processed_sets_completed(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test marking failure as completed."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
-        store.check_and_claim("hash_complete")
+        _ = store.check_and_claim("hash_complete")
         store.mark_processed("hash_complete", "https://github.com/pull/42")
 
         status = store.get_status("hash_complete")
@@ -156,12 +170,14 @@ class TestMarkFailed:
 
     def test_mark_failed_sets_status(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test marking failure as failed."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
-        store.check_and_claim("hash_failed")
+        _ = store.check_and_claim("hash_failed")
         store.mark_failed("hash_failed", "Processing error occurred")
 
         status = store.get_status("hash_failed")
@@ -173,9 +189,11 @@ class TestGetStatus:
 
     def test_get_status_nonexistent(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test getting status of non-existent failure."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         status = store.get_status("nonexistent")
@@ -184,12 +202,14 @@ class TestGetStatus:
 
     def test_get_status_returns_correct_enum(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that get_status returns correct FailureStatus enum."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
-        store.check_and_claim("hash_enum")
+        _ = store.check_and_claim("hash_enum")
         status = store.get_status("hash_enum")
 
         assert isinstance(status, FailureStatus)
@@ -201,9 +221,11 @@ class TestGetStatistics:
 
     def test_get_statistics_empty_store(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test statistics on empty store."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         stats = store.get_statistics()
@@ -215,14 +237,16 @@ class TestGetStatistics:
 
     def test_get_statistics_with_records(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test statistics with some records."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         # Create some records
-        store.check_and_claim("hash_1")  # IN_PROGRESS
-        store.check_and_claim("hash_2")  # IN_PROGRESS
+        _ = store.check_and_claim("hash_1")  # IN_PROGRESS
+        _ = store.check_and_claim("hash_2")  # IN_PROGRESS
         store.mark_processed("hash_1", "url")  # Now COMPLETED
 
         stats = store.get_statistics()
@@ -236,9 +260,11 @@ class TestCleanupOldRecords:
 
     def test_cleanup_is_noop(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that cleanup is a no-op (Redis TTL handles expiration)."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
         deleted = store.cleanup_old_records(retention_days=7)
@@ -251,11 +277,13 @@ class TestContextManager:
 
     def test_context_manager_closes_connection(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test that context manager closes connection."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         with RedisStateStore(redis_url="redis://localhost:6379/0") as store:
-            store.check_and_claim("hash_context")
+            _ = store.check_and_claim("hash_context")
 
         # Connection should be closed (no exception means success)
 
@@ -265,24 +293,28 @@ class TestSanitizeUrl:
 
     def test_sanitize_url_with_password(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test URL sanitization removes password."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
-        sanitized = store._sanitize_url("redis://user:secret123@localhost:6379/0")
+        sanitized = store._sanitize_url("redis://user:secret123@localhost:6379/0")  # pyright: ignore[reportPrivateUsage]
 
         assert "secret123" not in sanitized
         assert "***" in sanitized
 
     def test_sanitize_url_without_password(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test URL without password is unchanged."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(redis_url="redis://localhost:6379/0")
 
-        sanitized = store._sanitize_url("redis://localhost:6379/0")
+        sanitized = store._sanitize_url("redis://localhost:6379/0")  # pyright: ignore[reportPrivateUsage]
 
         assert sanitized == "redis://localhost:6379/0"
 
@@ -292,15 +324,17 @@ class TestMakeKey:
 
     def test_make_key_format(
         self,
-        mock_redis_client: MagicMock,
+        mock_redis_client: object,
     ) -> None:
         """Test key generation format."""
+        # Fixture used for side effects
+        _ = mock_redis_client
         store = RedisStateStore(
             redis_url="redis://localhost:6379/0",
             key_prefix="test:",
         )
 
-        key = store._make_key("abc123")
+        key = store._make_key("abc123")  # pyright: ignore[reportPrivateUsage]
 
         assert key == "test:failure:abc123"
 

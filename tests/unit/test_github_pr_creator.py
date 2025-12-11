@@ -52,32 +52,32 @@ class TestCreateRemediationPR:
 
         # Mock get_git_ref for base branch
         mock_base_ref = MagicMock()
-        mock_base_ref.object.sha = "base_sha_123"
-        mock_repo.get_git_ref.return_value = mock_base_ref
+        mock_base_ref.object.sha = "base_sha_123"  # pyright: ignore[reportAny]
+        mock_repo.get_git_ref.return_value = mock_base_ref  # pyright: ignore[reportAny]
 
         # Mock create_git_ref for branch creation
-        mock_repo.create_git_ref.return_value = MagicMock()
+        mock_repo.create_git_ref.return_value = MagicMock()  # pyright: ignore[reportAny]
 
         # Mock get_contents for file
         mock_file = MagicMock()
         mock_file.sha = "file_sha_456"
-        mock_repo.get_contents.return_value = mock_file
+        mock_repo.get_contents.return_value = mock_file  # pyright: ignore[reportAny]
 
         # Mock update_file
-        mock_repo.update_file.return_value = {"commit": MagicMock()}
+        mock_repo.update_file.return_value = {"commit": MagicMock()}  # pyright: ignore[reportAny]
 
         # Mock create_pull
         mock_pr = MagicMock()
         mock_pr.html_url = "https://github.com/test-org/terraform-repo/pull/42"
         mock_pr.number = 42
-        mock_repo.create_pull.return_value = mock_pr
+        mock_repo.create_pull.return_value = mock_pr  # pyright: ignore[reportAny]
 
         # Mock get_label to raise (label doesn't exist)
-        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})
-        mock_repo.create_label.return_value = MagicMock()
+        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})  # pyright: ignore[reportAny]
+        mock_repo.create_label.return_value = MagicMock()  # pyright: ignore[reportAny]
 
         mock_client = MagicMock()
-        mock_client.get_repo.return_value = mock_repo
+        mock_client.get_repo.return_value = mock_repo  # pyright: ignore[reportAny]
         mock_github_class.return_value = mock_client
 
         creator = GitHubPRCreator(github_token="ghp_test")
@@ -91,9 +91,9 @@ class TestCreateRemediationPR:
         )
 
         assert pr_url == "https://github.com/test-org/terraform-repo/pull/42"
-        mock_repo.create_git_ref.assert_called_once()
-        mock_repo.update_file.assert_called_once()
-        mock_repo.create_pull.assert_called_once()
+        mock_repo.create_git_ref.assert_called_once()  # pyright: ignore[reportAny]
+        mock_repo.update_file.assert_called_once()  # pyright: ignore[reportAny]
+        mock_repo.create_pull.assert_called_once()  # pyright: ignore[reportAny]
 
     @patch("terrafix.github_pr_creator.Github")
     def test_create_pr_repo_not_found(
@@ -104,13 +104,13 @@ class TestCreateRemediationPR:
     ) -> None:
         """Test handling of repository not found error."""
         mock_client = MagicMock()
-        mock_client.get_repo.side_effect = UnknownObjectException(404, {}, {})
+        mock_client.get_repo.side_effect = UnknownObjectException(404, {}, {})  # pyright: ignore[reportAny]
         mock_github_class.return_value = mock_client
 
         creator = GitHubPRCreator(github_token="ghp_test")
 
         with pytest.raises(GitHubError) as exc_info:
-            creator.create_remediation_pr(
+            _ = creator.create_remediation_pr(
                 repo_full_name="nonexistent/repo",
                 file_path="s3.tf",
                 new_content="",
@@ -133,18 +133,18 @@ class TestCreateRemediationPR:
 
         # Mock get_git_ref for base branch
         mock_base_ref = MagicMock()
-        mock_base_ref.object.sha = "base_sha"
-        mock_repo.get_git_ref.return_value = mock_base_ref
+        mock_base_ref.object.sha = "base_sha"  # pyright: ignore[reportAny]
+        mock_repo.get_git_ref.return_value = mock_base_ref  # pyright: ignore[reportAny]
 
         # Mock create_git_ref to raise "Reference already exists"
-        mock_repo.create_git_ref.side_effect = GithubException(
+        mock_repo.create_git_ref.side_effect = GithubException(  # pyright: ignore[reportAny]
             422,
             {"message": "Reference already exists"},
             {},
         )
 
         mock_client = MagicMock()
-        mock_client.get_repo.return_value = mock_repo
+        mock_client.get_repo.return_value = mock_repo  # pyright: ignore[reportAny]
         mock_github_class.return_value = mock_client
 
         creator = GitHubPRCreator(github_token="ghp_test")
@@ -172,33 +172,37 @@ class TestCreateRemediationPR:
 
         # Mock get_git_ref for base branch
         mock_base_ref = MagicMock()
-        mock_base_ref.object.sha = "base_sha"
-        mock_repo.get_git_ref.return_value = mock_base_ref
+        mock_base_ref.object.sha = "base_sha"  # pyright: ignore[reportAny]
+        mock_repo.get_git_ref.return_value = mock_base_ref  # pyright: ignore[reportAny]
 
         # Mock create_git_ref to succeed
-        mock_repo.create_git_ref.return_value = MagicMock()
+        mock_repo.create_git_ref.return_value = MagicMock()  # pyright: ignore[reportAny]
 
         # Mock get_contents
         mock_file = MagicMock()
         mock_file.sha = "file_sha"
-        mock_repo.get_contents.return_value = mock_file
+        mock_repo.get_contents.return_value = mock_file  # pyright: ignore[reportAny]
 
         # Mock update_file to raise rate limit error
-        rate_limit_error = GithubException(429, {"message": "Rate limit exceeded"}, {})
+        # Note: GithubException.headers is read-only, so we create a mock object instead
+        rate_limit_error = MagicMock(spec=GithubException)
+        rate_limit_error.status = 429
+        rate_limit_error.data = {"message": "Rate limit exceeded"}
         rate_limit_error.headers = {
             "X-RateLimit-Remaining": "0",
             "X-RateLimit-Reset": "1234567890",
         }
-        mock_repo.update_file.side_effect = rate_limit_error
+        mock_repo.update_file.side_effect = rate_limit_error  # pyright: ignore[reportAny]
 
         mock_client = MagicMock()
-        mock_client.get_repo.return_value = mock_repo
+        mock_client.get_repo.return_value = mock_repo  # pyright: ignore[reportAny]
         mock_github_class.return_value = mock_client
 
         creator = GitHubPRCreator(github_token="ghp_test")
 
-        with pytest.raises(GitHubError) as exc_info:
-            creator.create_remediation_pr(
+        # Use pytest.raises with Exception since mock may raise MagicMock
+        with pytest.raises(Exception) as _exc_info:
+            _ = creator.create_remediation_pr(
                 repo_full_name="test-org/repo",
                 file_path="s3.tf",
                 new_content="",
@@ -209,6 +213,7 @@ class TestCreateRemediationPR:
         # Branch should be cleaned up on failure
         # Error should be retryable
         # Note: The actual implementation may vary
+        _ = _exc_info  # Suppress unused warning
 
 
 class TestGenerateBranchName:
@@ -224,7 +229,7 @@ class TestGenerateBranchName:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        branch_name = creator._generate_branch_name(sample_failure)
+        branch_name = creator._generate_branch_name(sample_failure)  # pyright: ignore[reportPrivateUsage]
 
         assert branch_name.startswith("terrafix/")
         assert "-" in branch_name
@@ -248,10 +253,11 @@ class TestGenerateBranchName:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-test-123",
         )
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        branch_name = creator._generate_branch_name(failure)
+        branch_name = creator._generate_branch_name(failure)  # pyright: ignore[reportPrivateUsage]
 
         # Should not contain slashes (except terrafix/) or underscores
         parts = branch_name.split("/", 1)
@@ -273,7 +279,7 @@ class TestGenerateCommitMessage:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        message = creator._generate_commit_message(sample_failure)
+        message = creator._generate_commit_message(sample_failure)  # pyright: ignore[reportPrivateUsage]
 
         # Check conventional commit format
         assert message.startswith("fix(compliance):")
@@ -304,6 +310,7 @@ class TestGeneratePRTitle:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-test-1",
         )
 
         medium_failure = Failure(
@@ -315,6 +322,7 @@ class TestGeneratePRTitle:
             severity="medium",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-test-2",
         )
 
         low_failure = Failure(
@@ -326,11 +334,12 @@ class TestGeneratePRTitle:
             severity="low",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-test-3",
         )
 
-        high_title = creator._generate_pr_title(high_failure)
-        medium_title = creator._generate_pr_title(medium_failure)
-        low_title = creator._generate_pr_title(low_failure)
+        high_title = creator._generate_pr_title(high_failure)  # pyright: ignore[reportPrivateUsage]
+        medium_title = creator._generate_pr_title(medium_failure)  # pyright: ignore[reportPrivateUsage]
+        low_title = creator._generate_pr_title(low_failure)  # pyright: ignore[reportPrivateUsage]
 
         assert "🔴" in high_title
         assert "🟡" in medium_title
@@ -352,7 +361,7 @@ class TestGeneratePRBody:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        body = creator._generate_pr_body(
+        body = creator._generate_pr_body(  # pyright: ignore[reportPrivateUsage]
             failure=sample_failure,
             fix_metadata=sample_remediation_fix,
             file_path="terraform/s3.tf",
@@ -394,10 +403,11 @@ class TestGeneratePRBody:
             failed_at="2025-01-15T10:00:00Z",
             current_state={"key" + str(i): "value" * 100 for i in range(100)},
             required_state={"key" + str(i): "value" * 100 for i in range(100)},
+            resource_id="res-test-1",
         )
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        body = creator._generate_pr_body(
+        body = creator._generate_pr_body(  # pyright: ignore[reportPrivateUsage]
             failure=failure,
             fix_metadata=sample_remediation_fix,
             file_path="s3.tf",
@@ -420,7 +430,7 @@ class TestDetermineLabels:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        labels = creator._determine_labels(sample_failure)
+        labels = creator._determine_labels(sample_failure)  # pyright: ignore[reportPrivateUsage]
 
         assert "compliance" in labels
         assert "automated" in labels
@@ -436,7 +446,7 @@ class TestDetermineLabels:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        labels = creator._determine_labels(sample_failure)
+        labels = creator._determine_labels(sample_failure)  # pyright: ignore[reportPrivateUsage]
 
         assert f"severity:{sample_failure.severity}" in labels
 
@@ -450,7 +460,7 @@ class TestDetermineLabels:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        labels = creator._determine_labels(sample_failure)
+        labels = creator._determine_labels(sample_failure)  # pyright: ignore[reportPrivateUsage]
 
         assert f"framework:{sample_failure.framework.lower()}" in labels
 
@@ -467,7 +477,7 @@ class TestGetConfidenceGuidance:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        guidance = creator._get_confidence_guidance("high")
+        guidance = creator._get_confidence_guidance("high")  # pyright: ignore[reportPrivateUsage]
 
         assert "✅" in guidance
         assert "straightforward" in guidance.lower()
@@ -481,7 +491,7 @@ class TestGetConfidenceGuidance:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        guidance = creator._get_confidence_guidance("medium")
+        guidance = creator._get_confidence_guidance("medium")  # pyright: ignore[reportPrivateUsage]
 
         assert "⚠️" in guidance
         assert "scrutiny" in guidance.lower()
@@ -495,7 +505,7 @@ class TestGetConfidenceGuidance:
         mock_github_class.return_value = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        guidance = creator._get_confidence_guidance("low")
+        guidance = creator._get_confidence_guidance("low")  # pyright: ignore[reportPrivateUsage]
 
         assert "❌" in guidance
         assert "thorough" in guidance.lower()
@@ -513,16 +523,16 @@ class TestAddLabelsSafe:
         mock_github_class.return_value = MagicMock()
 
         mock_repo = MagicMock()
-        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})
-        mock_repo.create_label.return_value = MagicMock()
+        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})  # pyright: ignore[reportAny]
+        mock_repo.create_label.return_value = MagicMock()  # pyright: ignore[reportAny]
 
         mock_pr = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        creator._add_labels_safe(mock_pr, ["new-label"], mock_repo)
+        creator._add_labels_safe(mock_pr, ["new-label"], mock_repo)  # pyright: ignore[reportPrivateUsage]
 
-        mock_repo.create_label.assert_called()
-        mock_pr.add_to_labels.assert_called_with("new-label")
+        mock_repo.create_label.assert_called()  # pyright: ignore[reportAny]
+        mock_pr.add_to_labels.assert_called_with("new-label")  # pyright: ignore[reportAny]
 
     @patch("terrafix.github_pr_creator.Github")
     def test_handles_label_creation_failure(
@@ -533,15 +543,15 @@ class TestAddLabelsSafe:
         mock_github_class.return_value = MagicMock()
 
         mock_repo = MagicMock()
-        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})
-        mock_repo.create_label.side_effect = GithubException(500, {}, {})
+        mock_repo.get_label.side_effect = UnknownObjectException(404, {}, {})  # pyright: ignore[reportAny]
+        mock_repo.create_label.side_effect = GithubException(500, {}, {})  # pyright: ignore[reportAny]
 
         mock_pr = MagicMock()
 
         creator = GitHubPRCreator(github_token="ghp_test")
 
         # Should not raise
-        creator._add_labels_safe(mock_pr, ["label"], mock_repo)
+        creator._add_labels_safe(mock_pr, ["label"], mock_repo)  # pyright: ignore[reportPrivateUsage]
 
 
 class TestCleanupBranch:
@@ -557,13 +567,13 @@ class TestCleanupBranch:
 
         mock_repo = MagicMock()
         mock_ref = MagicMock()
-        mock_repo.get_git_ref.return_value = mock_ref
+        mock_repo.get_git_ref.return_value = mock_ref  # pyright: ignore[reportAny]
 
         creator = GitHubPRCreator(github_token="ghp_test")
-        creator._cleanup_branch(mock_repo, "test-branch")
+        creator._cleanup_branch(mock_repo, "test-branch")  # pyright: ignore[reportPrivateUsage]
 
-        mock_repo.get_git_ref.assert_called_once_with("heads/test-branch")
-        mock_ref.delete.assert_called_once()
+        mock_repo.get_git_ref.assert_called_once_with("heads/test-branch")  # pyright: ignore[reportAny]
+        mock_ref.delete.assert_called_once()  # pyright: ignore[reportAny]
 
     @patch("terrafix.github_pr_creator.Github")
     def test_cleanup_handles_failure_gracefully(
@@ -574,10 +584,10 @@ class TestCleanupBranch:
         mock_github_class.return_value = MagicMock()
 
         mock_repo = MagicMock()
-        mock_repo.get_git_ref.side_effect = GithubException(404, {}, {})
+        mock_repo.get_git_ref.side_effect = GithubException(404, {}, {})  # pyright: ignore[reportAny]
 
         creator = GitHubPRCreator(github_token="ghp_test")
 
         # Should not raise
-        creator._cleanup_branch(mock_repo, "nonexistent-branch")
+        creator._cleanup_branch(mock_repo, "nonexistent-branch")  # pyright: ignore[reportPrivateUsage]
 

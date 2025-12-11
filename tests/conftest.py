@@ -11,11 +11,8 @@ Usage:
 """
 
 import json
-import os
 from collections.abc import Generator
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -79,14 +76,16 @@ def mock_settings(mock_env_vars: dict[str, str]) -> Settings:
     is bypassed by creating Settings directly.
 
     Args:
-        mock_env_vars: Environment variables fixture
+        mock_env_vars: Environment variables fixture (used for side effects)
 
     Returns:
         Configured Settings instance for testing
     """
+    # Suppress unused variable warning - fixture is used for side effects
+    _ = mock_env_vars
     # Create Settings directly to bypass lru_cache
     # Settings reads from environment variables set by mock_env_vars
-    return Settings()  # type: ignore[call-arg]
+    return Settings()  # pyright: ignore[reportCallIssue]
 
 
 # =============================================================================
@@ -220,7 +219,7 @@ def sample_terraform_repo(tmp_path: Path) -> Path:
     """
     # Create main.tf
     main_tf = tmp_path / "main.tf"
-    main_tf.write_text('''terraform {
+    _ = main_tf.write_text('''terraform {
   required_version = ">= 1.0.0"
   
   required_providers {
@@ -238,7 +237,7 @@ provider "aws" {
 
     # Create variables.tf
     variables_tf = tmp_path / "variables.tf"
-    variables_tf.write_text('''variable "aws_region" {
+    _ = variables_tf.write_text('''variable "aws_region" {
   description = "AWS region for resources"
   type        = string
   default     = "us-west-2"
@@ -253,7 +252,7 @@ variable "environment" {
 
     # Create s3.tf with the test bucket
     s3_tf = tmp_path / "s3.tf"
-    s3_tf.write_text('''resource "aws_s3_bucket" "test_bucket" {
+    _ = s3_tf.write_text('''resource "aws_s3_bucket" "test_bucket" {
   bucket = "test-bucket-12345"
   
   tags = {
@@ -273,7 +272,7 @@ resource "aws_s3_bucket_versioning" "test_bucket" {
 
     # Create iam.tf
     iam_tf = tmp_path / "iam.tf"
-    iam_tf.write_text('''resource "aws_iam_role" "test_role" {
+    _ = iam_tf.write_text('''resource "aws_iam_role" "test_role" {
   name = "test-role"
   
   assume_role_policy = jsonencode({
@@ -295,7 +294,7 @@ resource "aws_s3_bucket_versioning" "test_bucket" {
 
     # Create outputs.tf
     outputs_tf = tmp_path / "outputs.tf"
-    outputs_tf.write_text('''output "bucket_arn" {
+    _ = outputs_tf.write_text('''output "bucket_arn" {
   description = "ARN of the S3 bucket"
   value       = aws_s3_bucket.test_bucket.arn
 }
@@ -330,7 +329,7 @@ def sample_terraform_repo_large(tmp_path: Path) -> Path:
     # Create S3 module
     s3_module = modules_dir / "s3"
     s3_module.mkdir()
-    (s3_module / "main.tf").write_text('''variable "bucket_name" {
+    _ = (s3_module / "main.tf").write_text('''variable "bucket_name" {
   type = string
 }
 
@@ -367,7 +366,7 @@ module "bucket_{i}" {{
 }}
 '''
 
-    (tmp_path / "main.tf").write_text(main_tf_content)
+    _ = (tmp_path / "main.tf").write_text(main_tf_content)
 
     return tmp_path
 
@@ -389,7 +388,7 @@ def mock_vanta_session() -> Generator[responses.RequestsMock, None, None]:
     """
     with responses.RequestsMock() as rsps:
         # Add default OAuth token response
-        rsps.add(
+        _ = rsps.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
             json={
@@ -417,7 +416,7 @@ def mock_bedrock_client() -> MagicMock:
 
     # Create mock response body
     mock_response_body = MagicMock()
-    mock_response_body.read.return_value = json.dumps({
+    mock_response_body.read.return_value = json.dumps({  # pyright: ignore[reportAny]
         "content": [{
             "text": json.dumps({
                 "fixed_config": 'resource "aws_s3_bucket" "test" {}',
@@ -433,7 +432,7 @@ def mock_bedrock_client() -> MagicMock:
         "usage": {"input_tokens": 100, "output_tokens": 50},
     }).encode()
 
-    mock_client.invoke_model.return_value = {
+    mock_client.invoke_model.return_value = {  # pyright: ignore[reportAny]
         "body": mock_response_body,
         "contentType": "application/json",
     }
@@ -461,38 +460,38 @@ def mock_github_client() -> MagicMock:
 
     # Mock get_git_ref for base branch
     mock_base_ref = MagicMock()
-    mock_base_ref.object.sha = "abc123def456"
-    mock_repo.get_git_ref.return_value = mock_base_ref
+    mock_base_ref.object.sha = "abc123def456"  # pyright: ignore[reportAny]
+    mock_repo.get_git_ref.return_value = mock_base_ref  # pyright: ignore[reportAny]
 
     # Mock create_git_ref for branch creation
-    mock_repo.create_git_ref.return_value = MagicMock()
+    mock_repo.create_git_ref.return_value = MagicMock()  # pyright: ignore[reportAny]
 
     # Mock get_contents for file content
     mock_file_content = MagicMock()
     mock_file_content.sha = "file_sha_123"
     mock_file_content.decoded_content = b"old content"
-    mock_repo.get_contents.return_value = mock_file_content
+    mock_repo.get_contents.return_value = mock_file_content  # pyright: ignore[reportAny]
 
     # Mock update_file
-    mock_repo.update_file.return_value = {"commit": MagicMock()}
+    mock_repo.update_file.return_value = {"commit": MagicMock()}  # pyright: ignore[reportAny]
 
     # Mock create_pull
     mock_pr = MagicMock()
     mock_pr.html_url = "https://github.com/test-org/terraform-repo/pull/1"
     mock_pr.number = 1
-    mock_repo.create_pull.return_value = mock_pr
+    mock_repo.create_pull.return_value = mock_pr  # pyright: ignore[reportAny]
 
     # Mock get_label (raise for missing labels)
-    mock_repo.get_label.side_effect = Exception("Label not found")
-    mock_repo.create_label.return_value = MagicMock()
+    mock_repo.get_label.side_effect = Exception("Label not found")  # pyright: ignore[reportAny]
+    mock_repo.create_label.return_value = MagicMock()  # pyright: ignore[reportAny]
 
-    mock_client.get_repo.return_value = mock_repo
+    mock_client.get_repo.return_value = mock_repo  # pyright: ignore[reportAny]
 
     return mock_client
 
 
 @pytest.fixture
-def mock_redis_client() -> Generator[MagicMock, None, None]:
+def mock_redis_client() -> Generator[object, None, None]:
     """
     Provide a mocked Redis client using fakeredis.
 
@@ -500,7 +499,7 @@ def mock_redis_client() -> Generator[MagicMock, None, None]:
     the RedisStateStore without a real Redis server.
 
     Yields:
-        Mocked Redis client via fakeredis
+        Mocked Redis client via fakeredis (FakeRedis or MagicMock)
     """
     try:
         import fakeredis
@@ -510,10 +509,10 @@ def mock_redis_client() -> Generator[MagicMock, None, None]:
     except ImportError:
         # Fallback to MagicMock if fakeredis not available
         mock_redis = MagicMock()
-        mock_redis.ping.return_value = True
-        mock_redis.set.return_value = True
-        mock_redis.get.return_value = None
-        mock_redis.scan.return_value = (0, [])
+        mock_redis.ping.return_value = True  # pyright: ignore[reportAny]
+        mock_redis.set.return_value = True  # pyright: ignore[reportAny]
+        mock_redis.get.return_value = None  # pyright: ignore[reportAny]
+        mock_redis.scan.return_value = (0, [])  # pyright: ignore[reportAny]
         with patch("redis.from_url", return_value=mock_redis):
             yield mock_redis
 
@@ -524,7 +523,7 @@ def mock_redis_client() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def vcr_config() -> dict[str, Any]:
+def vcr_config() -> dict[str, object]:
     """
     Provide VCR.py configuration for recording/replaying HTTP interactions.
 
@@ -553,7 +552,7 @@ def vcr_config() -> dict[str, Any]:
 
 
 @pytest.fixture
-def sample_vanta_api_response() -> dict[str, Any]:
+def sample_vanta_api_response() -> dict[str, object]:
     """
     Provide a sample Vanta API response for testing.
 

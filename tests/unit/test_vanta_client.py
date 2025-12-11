@@ -5,9 +5,7 @@ Tests cover OAuth authentication, API requests, pagination handling,
 rate limiting, error handling, and failure hash generation.
 """
 
-import hashlib
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
 
 import pytest
 import responses
@@ -31,6 +29,7 @@ class TestFailureModel:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-123",
         )
 
         assert failure.test_id == "test-123"
@@ -53,6 +52,7 @@ class TestFailureModel:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-123",
         )
 
         assert failure.current_state == {}
@@ -62,8 +62,8 @@ class TestFailureModel:
 
     def test_failure_with_state_dicts(self) -> None:
         """Test Failure with current and required state."""
-        current = {"block_public_acls": False}
-        required = {"block_public_acls": True}
+        current: dict[str, object] = {"block_public_acls": False}
+        required: dict[str, object] = {"block_public_acls": True}
 
         failure = Failure(
             test_id="test-123",
@@ -76,6 +76,7 @@ class TestFailureModel:
             failed_at="2025-01-15T10:00:00Z",
             current_state=current,
             required_state=required,
+            resource_id="res-123",
         )
 
         assert failure.current_state == current
@@ -104,7 +105,7 @@ class TestVantaClientInit:
     @responses.activate
     def test_init_with_oauth_credentials(self) -> None:
         """Test initialization with OAuth client credentials."""
-        responses.add(
+        _ = responses.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
             json={
@@ -125,7 +126,7 @@ class TestVantaClientInit:
     def test_init_without_credentials_raises(self) -> None:
         """Test that init without credentials raises error."""
         with pytest.raises(VantaApiError) as exc_info:
-            VantaClient()
+            _ = VantaClient()
 
         assert "Must provide either api_token" in str(exc_info.value)
         assert exc_info.value.retryable is False
@@ -144,7 +145,7 @@ class TestVantaClientInit:
     @responses.activate
     def test_oauth_failure_raises_error(self) -> None:
         """Test that OAuth authentication failure raises error."""
-        responses.add(
+        _ = responses.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
             json={"error": "invalid_client"},
@@ -152,7 +153,7 @@ class TestVantaClientInit:
         )
 
         with pytest.raises(VantaApiError) as exc_info:
-            VantaClient(
+            _ = VantaClient(
                 client_id="invalid_client",
                 client_secret="invalid_secret",
             )
@@ -166,10 +167,10 @@ class TestVantaClientGetFailingTests:
     @responses.activate
     def test_get_failing_tests_success(
         self,
-        sample_vanta_api_response: dict,
+        sample_vanta_api_response: dict[str, object],
     ) -> None:
         """Test successful retrieval of failing tests."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json=sample_vanta_api_response,
@@ -186,7 +187,7 @@ class TestVantaClientGetFailingTests:
     @responses.activate
     def test_get_failing_tests_with_framework_filter(self) -> None:
         """Test filtering by framework."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"results": {"data": [], "pageInfo": {"hasNextPage": False}}},
@@ -203,7 +204,7 @@ class TestVantaClientGetFailingTests:
     def test_get_failing_tests_pagination(self) -> None:
         """Test pagination handling."""
         # First page with hasNextPage=True
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={
@@ -227,7 +228,7 @@ class TestVantaClientGetFailingTests:
         )
 
         # Second page with hasNextPage=False
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={
@@ -262,7 +263,7 @@ class TestVantaClientGetFailingTests:
         """Test filtering by timestamp."""
         since_time = datetime(2025, 1, 15, 9, 0, 0, tzinfo=UTC)
 
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={
@@ -305,7 +306,7 @@ class TestVantaClientGetFailingTests:
     @responses.activate
     def test_get_failing_tests_http_error(self) -> None:
         """Test handling of HTTP errors."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"error": "Internal Server Error"},
@@ -315,7 +316,7 @@ class TestVantaClientGetFailingTests:
         client = VantaClient(api_token="test_token")
 
         with pytest.raises(VantaApiError) as exc_info:
-            client.get_failing_tests()
+            _ = client.get_failing_tests()
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.retryable is True
@@ -323,7 +324,7 @@ class TestVantaClientGetFailingTests:
     @responses.activate
     def test_get_failing_tests_rate_limit_error(self) -> None:
         """Test handling of rate limit errors."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"error": "Rate limit exceeded"},
@@ -333,7 +334,7 @@ class TestVantaClientGetFailingTests:
         client = VantaClient(api_token="test_token")
 
         with pytest.raises(VantaApiError) as exc_info:
-            client.get_failing_tests()
+            _ = client.get_failing_tests()
 
         assert exc_info.value.status_code == 429
         assert exc_info.value.retryable is True
@@ -342,7 +343,7 @@ class TestVantaClientGetFailingTests:
     def test_get_failing_tests_401_triggers_reauth(self) -> None:
         """Test that 401 triggers re-authentication with OAuth."""
         # First call returns 401
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"error": "Unauthorized"},
@@ -350,7 +351,7 @@ class TestVantaClientGetFailingTests:
         )
 
         # OAuth re-authentication
-        responses.add(
+        _ = responses.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
             json={
@@ -361,7 +362,7 @@ class TestVantaClientGetFailingTests:
         )
 
         # Retry after re-auth succeeds
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"results": {"data": [], "pageInfo": {"hasNextPage": False}}},
@@ -369,7 +370,7 @@ class TestVantaClientGetFailingTests:
         )
 
         # Initialize with OAuth first
-        responses.add(
+        _ = responses.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
             json={
@@ -433,6 +434,7 @@ class TestVantaClientGenerateFailureHash:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",  # Different timestamp
+            resource_id="res-123",
         )
 
         failure2 = Failure(
@@ -444,6 +446,7 @@ class TestVantaClientGenerateFailureHash:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-16T11:00:00Z",  # Different timestamp
+            resource_id="res-123",
         )
 
         hash1 = client.generate_failure_hash(failure1)
@@ -466,6 +469,7 @@ class TestVantaClientGenerateFailureHash:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-123",
         )
 
         failure2 = Failure(
@@ -477,6 +481,7 @@ class TestVantaClientGenerateFailureHash:
             severity="high",
             framework="SOC2",
             failed_at="2025-01-15T10:00:00Z",
+            resource_id="res-456",
         )
 
         hash1 = client.generate_failure_hash(failure1)
@@ -491,10 +496,10 @@ class TestVantaClientGetFailingTestsSince:
     @responses.activate
     def test_get_failing_tests_since_with_timestamp(
         self,
-        sample_vanta_api_response: dict,
+        sample_vanta_api_response: dict[str, object],
     ) -> None:
         """Test get_failing_tests_since with a timestamp."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json=sample_vanta_api_response,
@@ -511,10 +516,10 @@ class TestVantaClientGetFailingTestsSince:
     @responses.activate
     def test_get_failing_tests_since_none_returns_all(
         self,
-        sample_vanta_api_response: dict,
+        sample_vanta_api_response: dict[str, object],
     ) -> None:
         """Test that None timestamp returns all failures."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json=sample_vanta_api_response,
@@ -534,7 +539,7 @@ class TestVantaClientEnrichFailure:
     @responses.activate
     def test_enrich_failure_with_resource_id(self) -> None:
         """Test failure enrichment when resource_id is present."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/resources/res-123",
             json={
@@ -552,7 +557,7 @@ class TestVantaClientEnrichFailure:
             "resource_id": "res-123",
         }
 
-        enriched = client._enrich_failure(failure_data)
+        enriched = client._enrich_failure(failure_data)  # pyright: ignore[reportPrivateUsage]
 
         assert "resource_details" in enriched
         assert enriched["resource_details"]["name"] == "test-resource"
@@ -566,7 +571,7 @@ class TestVantaClientEnrichFailure:
             "test_id": "test-123",
         }
 
-        enriched = client._enrich_failure(failure_data)
+        enriched = client._enrich_failure(failure_data)  # pyright: ignore[reportPrivateUsage]
 
         # Should return unchanged
         assert enriched == failure_data
@@ -574,7 +579,7 @@ class TestVantaClientEnrichFailure:
     @responses.activate
     def test_enrich_failure_handles_404(self) -> None:
         """Test graceful handling of 404 during enrichment."""
-        responses.add(
+        _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/resources/res-missing",
             json={"error": "Not found"},
@@ -589,7 +594,7 @@ class TestVantaClientEnrichFailure:
         }
 
         # Should not raise, just skip enrichment
-        enriched = client._enrich_failure(failure_data)
+        enriched = client._enrich_failure(failure_data)  # pyright: ignore[reportPrivateUsage]
 
         assert "resource_details" not in enriched
 
@@ -602,7 +607,7 @@ class TestVantaClientParseTimestamp:
         """Test parsing standard ISO 8601 timestamp."""
         client = VantaClient(api_token="test_token")
 
-        result = client._parse_timestamp("2025-01-15T10:30:00+00:00")
+        result = client._parse_timestamp("2025-01-15T10:30:00+00:00")  # pyright: ignore[reportPrivateUsage]
 
         assert result.year == 2025
         assert result.month == 1
@@ -615,7 +620,7 @@ class TestVantaClientParseTimestamp:
         """Test parsing timestamp with Z suffix."""
         client = VantaClient(api_token="test_token")
 
-        result = client._parse_timestamp("2025-01-15T10:30:00Z")
+        result = client._parse_timestamp("2025-01-15T10:30:00Z")  # pyright: ignore[reportPrivateUsage]
 
         assert result.year == 2025
         assert result.hour == 10
@@ -625,7 +630,7 @@ class TestVantaClientParseTimestamp:
         """Test that invalid timestamp returns datetime.min."""
         client = VantaClient(api_token="test_token")
 
-        result = client._parse_timestamp("invalid-timestamp")
+        result = client._parse_timestamp("invalid-timestamp")  # pyright: ignore[reportPrivateUsage]
 
         assert result == datetime.min
 
@@ -634,7 +639,7 @@ class TestVantaClientParseTimestamp:
         """Test that empty string returns datetime.min."""
         client = VantaClient(api_token="test_token")
 
-        result = client._parse_timestamp("")
+        result = client._parse_timestamp("")  # pyright: ignore[reportPrivateUsage]
 
         assert result == datetime.min
 

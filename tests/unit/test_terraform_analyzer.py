@@ -6,7 +6,6 @@ module context extraction, and error handling.
 """
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -43,14 +42,14 @@ class TestTerraformAnalyzerInit:
     ) -> None:
         """Test that invalid HCL files are skipped without failing."""
         # Create valid file
-        (tmp_path / "valid.tf").write_text('''
+        _ = (tmp_path / "valid.tf").write_text('''
 resource "aws_s3_bucket" "test" {
   bucket = "test-bucket"
 }
 ''')
 
         # Create invalid file
-        (tmp_path / "invalid.tf").write_text('''
+        _ = (tmp_path / "invalid.tf").write_text('''
 resource "aws_s3_bucket" "test" {
   bucket = "unclosed-brace
 }
@@ -110,7 +109,7 @@ class TestFindResourceByArn:
         )
 
         assert result is not None
-        file_path, resource_block, resource_name = result
+        file_path, _resource_block, resource_name = result
 
         assert "iam.tf" in file_path
         assert resource_name == "test_role"
@@ -134,7 +133,7 @@ class TestFindResourceByArn:
         tmp_path: Path,
     ) -> None:
         """Test finding resource by bucket attribute matching."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_s3_bucket" "my_bucket" {
   bucket = "my-specific-bucket-name"
   
@@ -164,7 +163,7 @@ class TestFuzzyFindByArn:
         tmp_path: Path,
     ) -> None:
         """Test fuzzy finding when AWS type is unknown."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_custom_resource" "custom" {
   name = "custom-resource-name"
 }
@@ -187,7 +186,7 @@ resource "aws_custom_resource" "custom" {
         tmp_path: Path,
     ) -> None:
         """Test fuzzy finding by name attribute."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_unknown_service" "test" {
   name = "my-resource-name"
 }
@@ -195,7 +194,7 @@ resource "aws_unknown_service" "test" {
 
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        result = analyzer._fuzzy_find_by_arn(
+        result = analyzer._fuzzy_find_by_arn(  # pyright: ignore[reportPrivateUsage]
             "arn:aws:unknown:::my-resource-name"
         )
 
@@ -212,7 +211,7 @@ class TestExtractNameFromArn:
         """Test extracting bucket name from S3 ARN."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        name = analyzer._extract_name_from_arn("arn:aws:s3:::my-bucket-name")
+        name = analyzer._extract_name_from_arn("arn:aws:s3:::my-bucket-name")  # pyright: ignore[reportPrivateUsage]
 
         assert name == "my-bucket-name"
 
@@ -223,7 +222,7 @@ class TestExtractNameFromArn:
         """Test extracting bucket name from S3 ARN with object path."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        name = analyzer._extract_name_from_arn("arn:aws:s3:::my-bucket/path/to/object")
+        name = analyzer._extract_name_from_arn("arn:aws:s3:::my-bucket/path/to/object")  # pyright: ignore[reportPrivateUsage]
 
         assert name == "my-bucket"
 
@@ -234,7 +233,7 @@ class TestExtractNameFromArn:
         """Test extracting role name from IAM ARN."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        name = analyzer._extract_name_from_arn(
+        name = analyzer._extract_name_from_arn(  # pyright: ignore[reportPrivateUsage]
             "arn:aws:iam::123456789012:role/MyRoleName"
         )
 
@@ -247,7 +246,7 @@ class TestExtractNameFromArn:
         """Test extracting function name from Lambda ARN."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        name = analyzer._extract_name_from_arn(
+        name = analyzer._extract_name_from_arn(  # pyright: ignore[reportPrivateUsage]
             "arn:aws:lambda:us-west-2:123456789012:function:MyFunction"
         )
 
@@ -260,7 +259,7 @@ class TestExtractNameFromArn:
         """Test extracting name from simple ARN format."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        name = analyzer._extract_name_from_arn(
+        name = analyzer._extract_name_from_arn(  # pyright: ignore[reportPrivateUsage]
             "arn:aws:ec2:us-west-2:123456789012:instance:i-12345"
         )
 
@@ -277,12 +276,12 @@ class TestResourceMatchesArn:
         """Test matching when resource has explicit ARN attribute."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        config: dict[str, Any] = {
+        config: dict[str, object] = {
             "arn": "arn:aws:s3:::my-bucket",
         }
 
-        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket")
-        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::other-bucket")
+        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket")  # pyright: ignore[reportPrivateUsage]
+        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::other-bucket")  # pyright: ignore[reportPrivateUsage]
 
     def test_matches_by_bucket_attribute(
         self,
@@ -291,12 +290,12 @@ class TestResourceMatchesArn:
         """Test matching by bucket attribute for S3 resources."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        config: dict[str, Any] = {
+        config: dict[str, object] = {
             "bucket": "my-bucket-name",
         }
 
-        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket-name")
-        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::other-bucket")
+        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket-name")  # pyright: ignore[reportPrivateUsage]
+        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::other-bucket")  # pyright: ignore[reportPrivateUsage]
 
     def test_matches_by_bucket_attribute_list(
         self,
@@ -305,11 +304,11 @@ class TestResourceMatchesArn:
         """Test matching when bucket is a list (HCL2 parsing quirk)."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        config: dict[str, Any] = {
+        config: dict[str, object] = {
             "bucket": ["my-bucket-name"],
         }
 
-        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket-name")
+        assert analyzer._resource_matches_arn(config, "arn:aws:s3:::my-bucket-name")  # pyright: ignore[reportPrivateUsage]
 
     def test_matches_by_name_attribute(
         self,
@@ -318,11 +317,11 @@ class TestResourceMatchesArn:
         """Test matching by name attribute."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        config: dict[str, Any] = {
+        config: dict[str, object] = {
             "name": "my-role-name",
         }
 
-        assert analyzer._resource_matches_arn(
+        assert analyzer._resource_matches_arn(  # pyright: ignore[reportPrivateUsage]
             config, "arn:aws:iam::123456:role/my-role-name"
         )
 
@@ -333,9 +332,9 @@ class TestResourceMatchesArn:
         """Test that empty config doesn't match."""
         analyzer = TerraformAnalyzer(str(tmp_path))
 
-        config: dict[str, Any] = {}
+        config: dict[str, object] = {}
 
-        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::bucket")
+        assert not analyzer._resource_matches_arn(config, "arn:aws:s3:::bucket")  # pyright: ignore[reportPrivateUsage]
 
 
 class TestGetModuleContext:
@@ -383,7 +382,8 @@ class TestGetModuleContext:
         context = analyzer.get_module_context(vars_tf)
 
         # variables.tf has variable definitions
-        assert len(context["variable"]) > 0
+        variable_list: list[object] = context["variable"]  # pyright: ignore[reportAny]
+        assert len(variable_list) > 0
 
     def test_get_module_context_nonexistent_file(
         self,
@@ -426,7 +426,7 @@ class TestGetFileContent:
         analyzer = TerraformAnalyzer(str(sample_terraform_repo))
 
         with pytest.raises(TerraformParseError) as exc_info:
-            analyzer.get_file_content("/nonexistent/file.tf")
+            _ = analyzer.get_file_content("/nonexistent/file.tf")
 
         assert "was not successfully parsed" in str(exc_info.value)
 
@@ -462,7 +462,7 @@ class TestLargeRepository:
 
         # The module defines a bucket resource with dynamic name
         # We need to check if resource matching handles modules
-        result = analyzer.find_resource_by_arn(
+        _result = analyzer.find_resource_by_arn(
             "arn:aws:s3:::test-bucket-00000",
             "AWS::S3::Bucket",
         )
@@ -480,7 +480,7 @@ class TestParsingEdgeCases:
         tmp_path: Path,
     ) -> None:
         """Test parsing file with heredoc strings."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_iam_policy" "test" {
   name = "test-policy"
   
@@ -502,7 +502,7 @@ resource "aws_iam_policy" "test" {
         tmp_path: Path,
     ) -> None:
         """Test parsing file with jsonencode function."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_iam_role" "test" {
   name = "test-role"
   
@@ -528,7 +528,7 @@ resource "aws_iam_role" "test" {
         tmp_path: Path,
     ) -> None:
         """Test parsing file with for_each meta-argument."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 variable "buckets" {
   type = set(string)
   default = ["bucket1", "bucket2"]
@@ -549,7 +549,7 @@ resource "aws_s3_bucket" "test" {
         tmp_path: Path,
     ) -> None:
         """Test parsing file with count meta-argument."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 resource "aws_s3_bucket" "test" {
   count  = 3
   bucket = "bucket-${count.index}"
@@ -565,7 +565,7 @@ resource "aws_s3_bucket" "test" {
         tmp_path: Path,
     ) -> None:
         """Test parsing file with locals block."""
-        (tmp_path / "main.tf").write_text('''
+        _ = (tmp_path / "main.tf").write_text('''
 locals {
   common_tags = {
     Environment = "test"

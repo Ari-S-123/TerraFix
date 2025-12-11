@@ -23,10 +23,12 @@ class TestSettingsValidation:
         mock_env_vars: dict[str, str],
     ) -> None:
         """Test that Settings loads from environment variables."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         # Clear the cache first
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         assert settings.vanta_api_token == "test_vanta_token_12345"
         assert settings.github_token == "ghp_test_github_token_67890"
@@ -45,7 +47,7 @@ class TestSettingsValidation:
         get_settings.cache_clear()
 
         with pytest.raises(Exception):  # Pydantic validation error
-            Settings()  # type: ignore[call-arg]
+            _ = Settings()  # pyright: ignore[reportCallIssue]
 
     def test_invalid_log_level_raises(
         self,
@@ -53,12 +55,14 @@ class TestSettingsValidation:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test that invalid LOG_LEVEL raises error."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.setenv("LOG_LEVEL", "INVALID")
 
         get_settings.cache_clear()
 
         with pytest.raises(ConfigurationError) as exc_info:
-            Settings()  # type: ignore[call-arg]
+            _ = Settings()  # pyright: ignore[reportCallIssue]
 
         assert "LOG_LEVEL" in str(exc_info.value)
 
@@ -68,12 +72,14 @@ class TestSettingsValidation:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test that invalid AWS_REGION raises error."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.setenv("AWS_REGION", "invalid")
 
         get_settings.cache_clear()
 
         with pytest.raises(ConfigurationError) as exc_info:
-            Settings()  # type: ignore[call-arg]
+            _ = Settings()  # pyright: ignore[reportCallIssue]
 
         assert "AWS_REGION" in str(exc_info.value)
 
@@ -87,6 +93,8 @@ class TestGitHubRepoMapping:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test parsing JSON string for repo mapping."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         mapping = json.dumps({
             "arn:aws:s3:::prod-": "myorg/prod-terraform",
             "arn:aws:s3:::dev-": "myorg/dev-terraform",
@@ -96,7 +104,7 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         assert settings.github_repo_mapping["default"] == "myorg/terraform-main"
         assert len(settings.github_repo_mapping) == 3
@@ -107,6 +115,8 @@ class TestGitHubRepoMapping:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test exact ARN matching for repo lookup."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         mapping = json.dumps({
             "arn:aws:s3:::specific-bucket": "myorg/specific-repo",
             "default": "myorg/default-repo",
@@ -115,7 +125,7 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         repo = settings.get_repo_for_resource("arn:aws:s3:::specific-bucket")
         assert repo == "myorg/specific-repo"
@@ -126,6 +136,8 @@ class TestGitHubRepoMapping:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test prefix matching for repo lookup."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         mapping = json.dumps({
             "arn:aws:s3:::prod-": "myorg/prod-repo",
             "default": "myorg/default-repo",
@@ -134,7 +146,7 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         repo = settings.get_repo_for_resource("arn:aws:s3:::prod-bucket-123")
         assert repo == "myorg/prod-repo"
@@ -145,6 +157,8 @@ class TestGitHubRepoMapping:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test fallback to default repo."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         mapping = json.dumps({
             "arn:aws:s3:::specific-": "myorg/specific-repo",
             "default": "myorg/default-repo",
@@ -153,7 +167,7 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         repo = settings.get_repo_for_resource("arn:aws:s3:::other-bucket")
         assert repo == "myorg/default-repo"
@@ -164,6 +178,8 @@ class TestGitHubRepoMapping:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test None returned when no mapping found."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         mapping = json.dumps({
             "arn:aws:s3:::specific-": "myorg/specific-repo",
         })
@@ -171,7 +187,7 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         repo = settings.get_repo_for_resource("arn:aws:s3:::other-bucket")
         assert repo is None
@@ -185,6 +201,8 @@ class TestGetSettings:
         mock_env_vars: dict[str, str],
     ) -> None:
         """Test that get_settings caches the Settings instance."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         get_settings.cache_clear()
 
         with patch.object(Settings, "validate_boto3_credentials"):
@@ -199,12 +217,14 @@ class TestGetSettings:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test that get_settings validates AWS credentials."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
 
         get_settings.cache_clear()
 
         with pytest.raises(ConfigurationError) as exc_info:
-            get_settings()
+            _ = get_settings()
 
         assert "AWS_ACCESS_KEY_ID" in str(exc_info.value)
 
@@ -218,11 +238,13 @@ class TestSettingsDefaults:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test default poll interval."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.delenv("POLL_INTERVAL_SECONDS", raising=False)
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         assert settings.poll_interval_seconds == 300
 
@@ -232,11 +254,13 @@ class TestSettingsDefaults:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test default max workers."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.delenv("MAX_CONCURRENT_WORKERS", raising=False)
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         assert settings.max_concurrent_workers == 3
 
@@ -246,11 +270,13 @@ class TestSettingsDefaults:
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test default log level."""
+        # Fixture used for side effects
+        _ = mock_env_vars
         monkeypatch.delenv("LOG_LEVEL", raising=False)
 
         get_settings.cache_clear()
 
-        settings = Settings()  # type: ignore[call-arg]
+        settings = Settings()  # pyright: ignore[reportCallIssue]
 
         assert settings.log_level == "INFO"
 

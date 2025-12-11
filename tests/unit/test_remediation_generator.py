@@ -6,11 +6,10 @@ and error handling with mocked Bedrock client.
 """
 
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError  # pyright: ignore[reportMissingTypeStubs]
 
 from terrafix.errors import BedrockError
 from terrafix.remediation_generator import (
@@ -89,9 +88,10 @@ class TestTerraformRemediationGeneratorInit:
         mock_client = MagicMock()
         mock_boto_client.return_value = mock_client
 
-        generator = TerraformRemediationGenerator(
+        generator = TerraformRemediationGenerator(  # noqa: F841 - assigned for side effect
             read_timeout_seconds=1800,
         )
+        _ = generator  # Suppress unused warning
 
         # The config should be passed to boto3.client
         call_kwargs = mock_boto_client.call_args.kwargs
@@ -110,7 +110,7 @@ class TestGenerateFix:
         """Test successful fix generation."""
         # Mock Bedrock response
         mock_response_body = MagicMock()
-        mock_response_body.read.return_value = json.dumps({
+        mock_response_body.read.return_value = json.dumps({  # pyright: ignore[reportAny]
             "content": [{
                 "text": json.dumps({
                     "fixed_config": 'resource "aws_s3_bucket" "test" {}',
@@ -127,7 +127,7 @@ class TestGenerateFix:
         }).encode()
 
         mock_client = MagicMock()
-        mock_client.invoke_model.return_value = {
+        mock_client.invoke_model.return_value = {  # pyright: ignore[reportAny]
             "body": mock_response_body,
             "contentType": "application/json",
         }
@@ -144,7 +144,7 @@ class TestGenerateFix:
 
         assert isinstance(fix, RemediationFix)
         assert fix.confidence == "high"
-        mock_client.invoke_model.assert_called_once()
+        mock_client.invoke_model.assert_called_once()  # pyright: ignore[reportAny]
 
     @patch("boto3.client")
     def test_generate_fix_handles_markdown_wrapped_json(
@@ -162,7 +162,7 @@ class TestGenerateFix:
         })
 
         mock_response_body = MagicMock()
-        mock_response_body.read.return_value = json.dumps({
+        mock_response_body.read.return_value = json.dumps({  # pyright: ignore[reportAny]
             "content": [{
                 "text": f"Here's the fix:\n```json\n{json_content}\n```\n"
             }],
@@ -170,7 +170,7 @@ class TestGenerateFix:
         }).encode()
 
         mock_client = MagicMock()
-        mock_client.invoke_model.return_value = {
+        mock_client.invoke_model.return_value = {  # pyright: ignore[reportAny]
             "body": mock_response_body,
             "contentType": "application/json",
         }
@@ -195,7 +195,7 @@ class TestGenerateFix:
     ) -> None:
         """Test that ThrottlingException is marked as retryable."""
         mock_client = MagicMock()
-        mock_client.invoke_model.side_effect = ClientError(
+        mock_client.invoke_model.side_effect = ClientError(  # pyright: ignore[reportAny]
             {
                 "Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"},
                 "ResponseMetadata": {"RequestId": "req-123"},
@@ -207,7 +207,7 @@ class TestGenerateFix:
         generator = TerraformRemediationGenerator()
 
         with pytest.raises(BedrockError) as exc_info:
-            generator.generate_fix(
+            _ = generator.generate_fix(
                 failure=sample_failure,
                 current_config="",
                 resource_block={},
@@ -225,7 +225,7 @@ class TestGenerateFix:
     ) -> None:
         """Test that ValidationException is not retryable."""
         mock_client = MagicMock()
-        mock_client.invoke_model.side_effect = ClientError(
+        mock_client.invoke_model.side_effect = ClientError(  # pyright: ignore[reportAny]
             {
                 "Error": {"Code": "ValidationException", "Message": "Invalid input"},
                 "ResponseMetadata": {"RequestId": "req-123"},
@@ -237,7 +237,7 @@ class TestGenerateFix:
         generator = TerraformRemediationGenerator()
 
         with pytest.raises(BedrockError) as exc_info:
-            generator.generate_fix(
+            _ = generator.generate_fix(
                 failure=sample_failure,
                 current_config="",
                 resource_block={},
@@ -261,7 +261,7 @@ class TestConstructPrompt:
 
         generator = TerraformRemediationGenerator()
 
-        prompt = generator._construct_prompt(
+        prompt = generator._construct_prompt(  # pyright: ignore[reportPrivateUsage]
             failure=sample_failure,
             current_config='resource "aws_s3_bucket" "test" {}',
             resource_block={"bucket": "test"},
@@ -289,7 +289,7 @@ class TestConstructPrompt:
 
         generator = TerraformRemediationGenerator()
 
-        prompt = generator._construct_prompt(
+        prompt = generator._construct_prompt(  # pyright: ignore[reportPrivateUsage]
             failure=sample_failure,
             current_config="",
             resource_block={},
@@ -316,7 +316,7 @@ class TestConstructPrompt:
   bucket = "my-special-bucket"
 }'''
 
-        prompt = generator._construct_prompt(
+        prompt = generator._construct_prompt(  # pyright: ignore[reportPrivateUsage]
             failure=sample_failure,
             current_config=current_config,
             resource_block={},
@@ -340,7 +340,7 @@ class TestGetTerraformDocsForResource:
 
         generator = TerraformRemediationGenerator()
 
-        docs = generator._get_terraform_docs_for_resource("AWS::S3::Bucket")
+        docs = generator._get_terraform_docs_for_resource("AWS::S3::Bucket")  # pyright: ignore[reportPrivateUsage]
 
         assert "aws_s3_bucket" in docs
         assert "block_public_acls" in docs
@@ -356,7 +356,7 @@ class TestGetTerraformDocsForResource:
 
         generator = TerraformRemediationGenerator()
 
-        docs = generator._get_terraform_docs_for_resource("AWS::IAM::Role")
+        docs = generator._get_terraform_docs_for_resource("AWS::IAM::Role")  # pyright: ignore[reportPrivateUsage]
 
         assert "aws_iam_role" in docs
         assert "assume_role_policy" in docs
@@ -371,7 +371,7 @@ class TestGetTerraformDocsForResource:
 
         generator = TerraformRemediationGenerator()
 
-        docs = generator._get_terraform_docs_for_resource("AWS::Unknown::Resource")
+        docs = generator._get_terraform_docs_for_resource("AWS::Unknown::Resource")  # pyright: ignore[reportPrivateUsage]
 
         assert "No specific docs available" in docs
 
@@ -386,37 +386,38 @@ class TestInvokeClaude:
     ) -> None:
         """Test that invoke_model is called with correct structure."""
         mock_response_body = MagicMock()
-        mock_response_body.read.return_value = json.dumps({
+        mock_response_body.read.return_value = json.dumps({  # pyright: ignore[reportAny]
             "content": [{"text": "{}"}],
             "stop_reason": "end_turn",
         }).encode()
 
         mock_client = MagicMock()
-        mock_client.invoke_model.return_value = {
+        mock_client.invoke_model.return_value = {  # pyright: ignore[reportAny]
             "body": mock_response_body,
             "contentType": "application/json",
         }
         mock_boto_client.return_value = mock_client
 
         generator = TerraformRemediationGenerator()
-        generator._invoke_claude("test prompt")
+        _ = generator._invoke_claude("test prompt")  # pyright: ignore[reportPrivateUsage]
 
         # Verify the call structure
-        call_args = mock_client.invoke_model.call_args
-        assert call_args.kwargs["modelId"] == generator.model_id
-        assert call_args.kwargs["contentType"] == "application/json"
-        assert call_args.kwargs["accept"] == "application/json"
+        call_args = mock_client.invoke_model.call_args  # pyright: ignore[reportAny]
+        assert call_args.kwargs["modelId"] == generator.model_id  # pyright: ignore[reportAny]
+        assert call_args.kwargs["contentType"] == "application/json"  # pyright: ignore[reportAny]
+        assert call_args.kwargs["accept"] == "application/json"  # pyright: ignore[reportAny]
 
         # Parse the body to verify structure
-        body = json.loads(call_args.kwargs["body"])
+        body = json.loads(call_args.kwargs["body"])  # pyright: ignore[reportAny]
         assert body["anthropic_version"] == "bedrock-2023-05-31"
         assert body["max_tokens"] == 4096
         assert body["temperature"] == 0.1
         assert "system" in body
         assert "messages" in body
-        assert len(body["messages"]) == 1
-        assert body["messages"][0]["role"] == "user"
-        assert body["messages"][0]["content"] == "test prompt"
+        messages: list[dict[str, str]] = body["messages"]  # pyright: ignore[reportAny]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "test prompt"
 
 
 class TestParseResponse:
@@ -432,7 +433,7 @@ class TestParseResponse:
 
         generator = TerraformRemediationGenerator()
 
-        response: dict[str, Any] = {
+        response: dict[str, object] = {
             "content": [{
                 "text": json.dumps({
                     "fixed_config": "test config",
@@ -447,7 +448,7 @@ class TestParseResponse:
             "stop_reason": "end_turn",
         }
 
-        fix = generator._parse_response(response)
+        fix = generator._parse_response(response)  # pyright: ignore[reportPrivateUsage]
 
         assert fix.fixed_config == "test config"
         assert fix.explanation == "test explanation"
@@ -464,10 +465,10 @@ class TestParseResponse:
 
         generator = TerraformRemediationGenerator()
 
-        response: dict[str, Any] = {"content": []}
+        response: dict[str, object] = {"content": []}
 
         with pytest.raises(BedrockError) as exc_info:
-            generator._parse_response(response)
+            _ = generator._parse_response(response)  # pyright: ignore[reportPrivateUsage]
 
         assert "Empty Claude response" in str(exc_info.value)
 
@@ -481,12 +482,12 @@ class TestParseResponse:
 
         generator = TerraformRemediationGenerator()
 
-        response: dict[str, Any] = {
+        response: dict[str, object] = {
             "content": [{"text": "not valid json {{{"}]
         }
 
         with pytest.raises(BedrockError) as exc_info:
-            generator._parse_response(response)
+            _ = generator._parse_response(response)  # pyright: ignore[reportPrivateUsage]
 
         assert "Invalid JSON" in str(exc_info.value)
 
@@ -501,7 +502,7 @@ class TestParseResponse:
         generator = TerraformRemediationGenerator()
 
         # Missing "confidence" field
-        response: dict[str, Any] = {
+        response: dict[str, object] = {
             "content": [{
                 "text": json.dumps({
                     "fixed_config": "test",
@@ -512,7 +513,7 @@ class TestParseResponse:
         }
 
         with pytest.raises(BedrockError) as exc_info:
-            generator._parse_response(response)
+            _ = generator._parse_response(response)  # pyright: ignore[reportPrivateUsage]
 
         assert "Missing required field" in str(exc_info.value)
         assert "confidence" in str(exc_info.value)
@@ -533,13 +534,13 @@ class TestParseResponse:
             "confidence": "high",
         })
 
-        response: dict[str, Any] = {
+        response: dict[str, object] = {
             "content": [{
                 "text": f"```json\n{json_content}\n```"
             }]
         }
 
-        fix = generator._parse_response(response)
+        fix = generator._parse_response(response)  # pyright: ignore[reportPrivateUsage]
 
         assert fix.fixed_config == "test"
         assert fix.confidence == "high"

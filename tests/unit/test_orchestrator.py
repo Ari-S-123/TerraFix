@@ -7,7 +7,6 @@ retry logic, error handling, and validation.
 
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,8 +20,8 @@ from terrafix.errors import (
 )
 from terrafix.orchestrator import (
     ProcessingResult,
-    _process_failure_once,
-    _process_failure_with_retry,
+    _process_failure_once,  # pyright: ignore[reportPrivateUsage]
+    _process_failure_with_retry,  # pyright: ignore[reportPrivateUsage]
     process_failure,
 )
 from terrafix.redis_state_store import RedisStateStore
@@ -84,11 +83,11 @@ class TestProcessFailure:
         """Test that already-processed failures are skipped."""
         # Mock state store
         mock_state_store = MagicMock(spec=RedisStateStore)
-        mock_state_store.is_already_processed.return_value = True
+        mock_state_store.is_already_processed.return_value = True  # pyright: ignore[reportAny]
 
         # Mock vanta client
         mock_vanta = MagicMock(spec=VantaClient)
-        mock_vanta.generate_failure_hash.return_value = "existing_hash"
+        mock_vanta.generate_failure_hash.return_value = "existing_hash"  # pyright: ignore[reportAny]
 
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
         mock_gh = MagicMock()
@@ -118,11 +117,11 @@ class TestProcessFailure:
 
         # Mock state store
         mock_state_store = MagicMock(spec=RedisStateStore)
-        mock_state_store.is_already_processed.return_value = False
+        mock_state_store.is_already_processed.return_value = False  # pyright: ignore[reportAny]
 
         # Mock vanta client
         mock_vanta = MagicMock(spec=VantaClient)
-        mock_vanta.generate_failure_hash.return_value = "new_hash"
+        mock_vanta.generate_failure_hash.return_value = "new_hash"  # pyright: ignore[reportAny]
 
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
         mock_gh = MagicMock()
@@ -138,8 +137,8 @@ class TestProcessFailure:
 
         assert result.success is True
         assert result.pr_url == "https://github.com/org/repo/pull/42"
-        mock_state_store.mark_in_progress.assert_called_once()
-        mock_state_store.mark_processed.assert_called_once()
+        mock_state_store.mark_in_progress.assert_called_once()  # pyright: ignore[reportAny]
+        mock_state_store.mark_processed.assert_called_once()  # pyright: ignore[reportAny]
 
     @patch("terrafix.orchestrator._process_failure_with_retry")
     def test_process_failure_marks_failed_on_error(
@@ -153,11 +152,11 @@ class TestProcessFailure:
 
         # Mock state store
         mock_state_store = MagicMock(spec=RedisStateStore)
-        mock_state_store.is_already_processed.return_value = False
+        mock_state_store.is_already_processed.return_value = False  # pyright: ignore[reportAny]
 
         # Mock vanta client
         mock_vanta = MagicMock(spec=VantaClient)
-        mock_vanta.generate_failure_hash.return_value = "failed_hash"
+        mock_vanta.generate_failure_hash.return_value = "failed_hash"  # pyright: ignore[reportAny]
 
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
         mock_gh = MagicMock()
@@ -172,8 +171,8 @@ class TestProcessFailure:
         )
 
         assert result.success is False
-        assert "Test error" in result.error  # type: ignore[operator]
-        mock_state_store.mark_failed.assert_called_once()
+        assert result.error is not None and "Test error" in result.error
+        mock_state_store.mark_failed.assert_called_once()  # pyright: ignore[reportAny]
 
 
 class TestProcessFailureWithRetry:
@@ -224,7 +223,7 @@ class TestProcessFailureWithRetry:
         mock_gh = MagicMock()
 
         with pytest.raises(ResourceNotFoundError):
-            _process_failure_with_retry(
+            _ = _process_failure_with_retry(
                 failure=sample_failure,
                 config=mock_settings,
                 generator=mock_generator,
@@ -251,7 +250,7 @@ class TestProcessFailureWithRetry:
         mock_gh = MagicMock()
 
         with pytest.raises(BedrockError):
-            _process_failure_with_retry(
+            _ = _process_failure_with_retry(
                 failure=sample_failure,
                 config=mock_settings,
                 generator=mock_generator,
@@ -279,7 +278,7 @@ class TestProcessFailureWithRetry:
 
         with patch("terrafix.orchestrator.time.sleep"):  # Skip actual sleep
             with pytest.raises(GitHubError):
-                _process_failure_with_retry(
+                _ = _process_failure_with_retry(
                     failure=sample_failure,
                     config=mock_settings,
                     generator=mock_generator,
@@ -312,19 +311,19 @@ class TestProcessFailureOnce:
 
         # Mock analyzer
         mock_analyzer = MagicMock()
-        mock_analyzer.find_resource_by_arn.return_value = (
+        mock_analyzer.find_resource_by_arn.return_value = (  # pyright: ignore[reportAny]
             "/tmp/repo/s3.tf",
             {"bucket": "test"},
             "test_bucket",
         )
-        mock_analyzer.get_module_context.return_value = {}
-        mock_analyzer.get_file_content.return_value = 'resource "aws_s3_bucket" {}'
+        mock_analyzer.get_module_context.return_value = {}  # pyright: ignore[reportAny]
+        mock_analyzer.get_file_content.return_value = 'resource "aws_s3_bucket" {}'  # pyright: ignore[reportAny]
         mock_analyzer.terraform_files = ["s3.tf"]
         mock_analyzer_class.return_value = mock_analyzer
 
         # Mock validator
         mock_validator = MagicMock()
-        mock_validator.validate_configuration.return_value = MagicMock(
+        mock_validator.validate_configuration.return_value = MagicMock(  # pyright: ignore[reportAny]
             is_valid=True,
             formatted_content=sample_remediation_fix.fixed_config,
             warnings=[],
@@ -333,23 +332,23 @@ class TestProcessFailureOnce:
 
         # Mock generator
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
-        mock_generator.generate_fix.return_value = sample_remediation_fix
+        mock_generator.generate_fix.return_value = sample_remediation_fix  # pyright: ignore[reportAny]
 
         # Mock GitHub PR creator
         mock_gh = MagicMock()
-        mock_gh.create_remediation_pr.return_value = "https://github.com/org/repo/pull/1"
+        mock_gh.create_remediation_pr.return_value = "https://github.com/org/repo/pull/1"  # pyright: ignore[reportAny]
 
         # Create a temporary directory structure
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create terraform path
             terraform_path = Path(temp_dir) / "repo" / "terraform"
             terraform_path.mkdir(parents=True)
-            (terraform_path / "s3.tf").write_text('resource "aws_s3_bucket" "test" {}')
+            _ = (terraform_path / "s3.tf").write_text('resource "aws_s3_bucket" "test" {}')
 
             # Patch tempfile to use our temp dir
             with patch("tempfile.TemporaryDirectory") as mock_tempdir:
-                mock_tempdir.return_value.__enter__.return_value = temp_dir
-                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)
+                mock_tempdir.return_value.__enter__.return_value = temp_dir  # pyright: ignore[reportAny]
+                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)  # pyright: ignore[reportAny]
 
                 # Configure settings to use terraform subdirectory
                 mock_settings.terraform_path = "terraform"
@@ -362,8 +361,8 @@ class TestProcessFailureOnce:
                 )
 
         assert pr_url == "https://github.com/org/repo/pull/1"
-        mock_generator.generate_fix.assert_called_once()
-        mock_gh.create_remediation_pr.assert_called_once()
+        mock_generator.generate_fix.assert_called_once()  # pyright: ignore[reportAny]
+        mock_gh.create_remediation_pr.assert_called_once()  # pyright: ignore[reportAny]
 
     @patch("terrafix.orchestrator.SecureGitClient")
     def test_process_failure_once_no_repo_mapping(
@@ -373,6 +372,8 @@ class TestProcessFailureOnce:
         sample_failure: Failure,
     ) -> None:
         """Test error when no repository mapping exists."""
+        # Used for patching
+        _ = mock_git_class
         # Override settings to have no repo mapping
         mock_settings.github_repo_mapping = {}
 
@@ -380,7 +381,7 @@ class TestProcessFailureOnce:
         mock_gh = MagicMock()
 
         with pytest.raises(ResourceNotFoundError) as exc_info:
-            _process_failure_once(
+            _ = _process_failure_once(
                 failure=sample_failure,
                 config=mock_settings,
                 generator=mock_generator,
@@ -405,7 +406,7 @@ class TestProcessFailureOnce:
 
         # Mock analyzer to not find resource
         mock_analyzer = MagicMock()
-        mock_analyzer.find_resource_by_arn.return_value = None
+        mock_analyzer.find_resource_by_arn.return_value = None  # pyright: ignore[reportAny]
         mock_analyzer.terraform_files = ["main.tf"]
         mock_analyzer_class.return_value = mock_analyzer
 
@@ -415,16 +416,16 @@ class TestProcessFailureOnce:
         with tempfile.TemporaryDirectory() as temp_dir:
             terraform_path = Path(temp_dir) / "repo" / "terraform"
             terraform_path.mkdir(parents=True)
-            (terraform_path / "main.tf").write_text("")
+            _ = (terraform_path / "main.tf").write_text("")
 
             with patch("tempfile.TemporaryDirectory") as mock_tempdir:
-                mock_tempdir.return_value.__enter__.return_value = temp_dir
-                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)
+                mock_tempdir.return_value.__enter__.return_value = temp_dir  # pyright: ignore[reportAny]
+                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)  # pyright: ignore[reportAny]
 
                 mock_settings.terraform_path = "terraform"
 
                 with pytest.raises(ResourceNotFoundError) as exc_info:
-                    _process_failure_once(
+                    _ = _process_failure_once(
                         failure=sample_failure,
                         config=mock_settings,
                         generator=mock_generator,
@@ -445,19 +446,21 @@ class TestProcessFailureOnce:
         sample_failure: Failure,
     ) -> None:
         """Test error when generated fix is empty."""
+        # Unused but required for patching
+        _ = mock_validator_class
         # Mock git client
         mock_git = MagicMock()
         mock_git_class.return_value = mock_git
 
         # Mock analyzer
         mock_analyzer = MagicMock()
-        mock_analyzer.find_resource_by_arn.return_value = (
+        mock_analyzer.find_resource_by_arn.return_value = (  # pyright: ignore[reportAny]
             "/tmp/repo/s3.tf",
             {"bucket": "test"},
             "test_bucket",
         )
-        mock_analyzer.get_module_context.return_value = {}
-        mock_analyzer.get_file_content.return_value = ""
+        mock_analyzer.get_module_context.return_value = {}  # pyright: ignore[reportAny]
+        mock_analyzer.get_file_content.return_value = ""  # pyright: ignore[reportAny]
         mock_analyzer_class.return_value = mock_analyzer
 
         # Mock generator to return empty fix
@@ -467,23 +470,23 @@ class TestProcessFailureOnce:
             confidence="high",
         )
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
-        mock_generator.generate_fix.return_value = empty_fix
+        mock_generator.generate_fix.return_value = empty_fix  # pyright: ignore[reportAny]
 
         mock_gh = MagicMock()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             terraform_path = Path(temp_dir) / "repo" / "terraform"
             terraform_path.mkdir(parents=True)
-            (terraform_path / "s3.tf").write_text("")
+            _ = (terraform_path / "s3.tf").write_text("")
 
             with patch("tempfile.TemporaryDirectory") as mock_tempdir:
-                mock_tempdir.return_value.__enter__.return_value = temp_dir
-                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)
+                mock_tempdir.return_value.__enter__.return_value = temp_dir  # pyright: ignore[reportAny]
+                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)  # pyright: ignore[reportAny]
 
                 mock_settings.terraform_path = "terraform"
 
                 with pytest.raises(TerraFixError) as exc_info:
-                    _process_failure_once(
+                    _ = _process_failure_once(
                         failure=sample_failure,
                         config=mock_settings,
                         generator=mock_generator,
@@ -511,18 +514,18 @@ class TestProcessFailureOnce:
 
         # Mock analyzer
         mock_analyzer = MagicMock()
-        mock_analyzer.find_resource_by_arn.return_value = (
+        mock_analyzer.find_resource_by_arn.return_value = (  # pyright: ignore[reportAny]
             "/tmp/repo/s3.tf",
             {"bucket": "test"},
             "test_bucket",
         )
-        mock_analyzer.get_module_context.return_value = {}
-        mock_analyzer.get_file_content.return_value = ""
+        mock_analyzer.get_module_context.return_value = {}  # pyright: ignore[reportAny]
+        mock_analyzer.get_file_content.return_value = ""  # pyright: ignore[reportAny]
         mock_analyzer_class.return_value = mock_analyzer
 
         # Mock validator to fail
         mock_validator = MagicMock()
-        mock_validator.validate_configuration.return_value = MagicMock(
+        mock_validator.validate_configuration.return_value = MagicMock(  # pyright: ignore[reportAny]
             is_valid=False,
             formatted_content=None,
             error_message="Invalid HCL syntax",
@@ -531,23 +534,23 @@ class TestProcessFailureOnce:
         mock_validator_class.return_value = mock_validator
 
         mock_generator = MagicMock(spec=TerraformRemediationGenerator)
-        mock_generator.generate_fix.return_value = sample_remediation_fix
+        mock_generator.generate_fix.return_value = sample_remediation_fix  # pyright: ignore[reportAny]
 
         mock_gh = MagicMock()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             terraform_path = Path(temp_dir) / "repo" / "terraform"
             terraform_path.mkdir(parents=True)
-            (terraform_path / "s3.tf").write_text("")
+            _ = (terraform_path / "s3.tf").write_text("")
 
             with patch("tempfile.TemporaryDirectory") as mock_tempdir:
-                mock_tempdir.return_value.__enter__.return_value = temp_dir
-                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)
+                mock_tempdir.return_value.__enter__.return_value = temp_dir  # pyright: ignore[reportAny]
+                mock_tempdir.return_value.__exit__ = MagicMock(return_value=False)  # pyright: ignore[reportAny]
 
                 mock_settings.terraform_path = "terraform"
 
                 with pytest.raises(TerraFixError) as exc_info:
-                    _process_failure_once(
+                    _ = _process_failure_once(
                         failure=sample_failure,
                         config=mock_settings,
                         generator=mock_generator,
