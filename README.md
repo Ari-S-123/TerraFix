@@ -142,7 +142,7 @@ Each PR includes:
 
 - **Terraform-Only**: Currently only supports Terraform (CloudFormation/Pulumi support planned)
 - **Polling-Based**: 5-minute polling interval (Vanta webhooks not available)
-- **No Automated Testing**: Generated fixes require human review before merging
+- **No Terraform Plan**: Runs `terraform fmt` and `terraform validate`; does not run `terraform plan` prior to PR creation
 - **Terraform Binary Required for Validation**: If terraform is unavailable, validation falls back to skip with warnings
 
 ## Development
@@ -256,8 +256,7 @@ See `.github/workflows/ci.yml` for the full pipeline configuration.
 - **Deeper Validation**: Run `terraform plan` in isolated environment
 - **Cost Analysis**: Integrate Infracost for cost impact estimates
 - **Learning from Feedback**: Track accepted/rejected PRs for continuous improvement
-- **Multi-Repository**: Concurrent processing across multiple repos
-- **Automated Tests**: Generate Terratest tests for fixes
+- **Richer Webhooks**: Add Vanta webhook support once available to reduce polling latency
 
 ## Security
 

@@ -17,7 +17,7 @@ Now, the end-to-end pipeline actually works: it polls Vanta, dedupes findings in
 I started with SQLite for state, but it was ephemeral. Every time a worker restarted, it would reprocess old failures. Moving to Redis with `SET NX` and a TTL gave me the atomicity and persistence I needed, which aligned perfectly with the "stateless service + external state" concept from the load balancer notes.
 
 **Unbounded tail latency:**
-Sometimes Bedrock or GitHub would spike, and the worker would just hang. Implementing token-bucket rate limiting and backoffs made those long tails explicit. It was a direct reminder of the "40ms or users leave" warning, I still need to build out the full P95/P99 dashboards to prove it, though.
+Sometimes Bedrock or GitHub would spike, and the worker would just hang. Implementing token-bucket rate limiting, the metrics collector with p50/p95/p99 timings, and backoffs made those long tails explicit.
 
 ## Concepts from the Course Applied Here
 *   **Event thinking vs. CRUD:** Vanta failures come in as a stream, so TerraFix effectively builds a read model (deduped failures + PR state). It feels a lot like the event-sourcing/CQRS split we discussed.

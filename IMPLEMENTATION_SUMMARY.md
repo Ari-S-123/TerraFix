@@ -2,9 +2,9 @@
 
 This document provides an overview of the completed TerraFix implementation following the specification in `terraform-pr-bot-spec.md`.
 
-## Implementation Status: ✅ Complete
+## Implementation Status: ✅ Core complete (pipeline, tests, CI, experiments)
 
-All components specified in the plan have been successfully implemented.
+All core components are implemented and covered by unit tests and CI. The experiment harness is available; experiment results still need to be gathered and reported.
 
 ## Architecture
 
@@ -189,7 +189,24 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - `outputs.tf`: Resource outputs
   - `README.md`: Deployment guide
 
-### 18. Documentation ✅
+### 18. Experiment Harness ✅
+- **Location**: `src/terrafix/experiments/`
+- **Features**:
+  - Synthetic failure generator with workload profiles (steady, burst, cascade)
+  - Failure injector for resilience scenarios
+  - Runner that records throughput/success metrics with percentile timings
+  - Reporter for single and comparison experiment outputs
+  - CLI entry point (`python -m terrafix.experiments`)
+
+### 19. Testing & CI ✅
+- **Location**: `tests/unit/`, `.github/workflows/ci.yml`
+- **Features**:
+  - Unit tests for config, Vanta client, Terraform analyzer, remediation generator, GitHub PR creator, state store, and orchestrator
+  - pytest fixtures with Terraform sample repos (small/medium/large)
+  - CI pipeline running ruff lint/format checks, mypy, pytest with coverage, Codecov upload
+  - Dummy environment variables wired for CI test execution
+
+### 20. Documentation ✅
 - **Files Created**:
   - `README.md`: Main project documentation
   - `DEPLOYMENT_GUIDE.md`: Step-by-step deployment
@@ -228,16 +245,12 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 - **Rationale**: Catch invalid fixes early; avoid blocking when binary missing
 - **Trade-off**: Validation skipped when terraform not present
 
-## Testing Strategy (Not Yet Implemented)
+## Testing Strategy (Implemented)
 
-The specification includes testing requirements that are **not implemented** in this iteration:
-
-- Unit tests with VCR.py for API mocking
-- Integration tests with test repositories
-- Load tests with synthetic workload generator
-- CI/CD pipeline (GitHub Actions)
-
-These are left as future work per the user's instructions.
+- Unit tests cover configuration, API clients, Terraform parsing, remediation generation, PR creation, state store, and orchestration error paths.
+- Fixtures include Terraform corpora across small/medium/large to exercise parser and mapping logic.
+- CI runs ruff (lint + format check), mypy, pytest with coverage, and uploads coverage to Codecov.
+- Experiment harness provides synthetic workloads and percentile timing but experiment results still need to be run and published.
 
 ## Environment Requirements
 
@@ -323,13 +336,12 @@ To use TerraFix:
 
 ## Known Limitations
 
-1. **Single Repository Mapping**: Currently maps one resource pattern to one repo
-2. **No Automated Tests**: Testing framework not implemented
-3. **No Webhooks**: Polling-based (5-minute intervals)
-4. **Terraform Binary Dependency**: Validation falls back if terraform is unavailable
-5. **Limited Resource Types**: Fix generation examples still focused on common AWS services
-6. **No Cost Analysis**: Infracost integration not implemented
-7. **No Terraform Plan Validation**: Doesn't run `terraform plan` before PR
+1. **Polling-Only**: Vanta webhooks not yet supported; relies on 5-minute polling.
+2. **Terraform Plan Not Run**: Uses fmt/validate; does not execute `terraform plan` pre-PR.
+3. **Terraform Binary Dependency**: Validation requires Terraform; falls back with warnings if unavailable.
+4. **Limited Resource Examples**: Fix prompts focus on common AWS services; broader coverage not yet curated.
+5. **No Cost Analysis**: Infracost/cost impact estimation not integrated.
+6. **No Learning Loop**: Reviewer feedback not yet captured for model tuning.
 
 ## Success Criteria
 
