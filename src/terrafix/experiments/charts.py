@@ -717,7 +717,7 @@ class ExperimentChartGenerator:
         </html>
         """
 
-        output_path.write_text(html_content)
+        output_path.write_text(html_content, encoding="utf-8")
         print(f"Generated HTML report: {output_path}")
         return output_path
 

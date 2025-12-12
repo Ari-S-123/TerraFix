@@ -576,7 +576,7 @@ def generate_summary_report(
     </html>
     """
 
-    html_path.write_text(html_content)
+    html_path.write_text(html_content, encoding="utf-8")
     print(f"HTML report saved to: {html_path}")
 
     # Generate charts if matplotlib is available

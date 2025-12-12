@@ -1,0 +1,251 @@
+{
+  "timestamp": "2025-12-12T10:59:44.206266",
+  "experiments": {
+    "throughput": [
+      {
+        "name": "throughput_baseline",
+        "status": "completed",
+        "duration_seconds": 181.00089406967163,
+        "config": {
+          "users": 5,
+          "spawn_rate": 1,
+          "run_time": "3m"
+        },
+        "stats_file": "experiment_results\\throughput\\throughput_baseline_stats.csv",
+        "summary": {
+          "total_requests": 567,
+          "failure_count": 0,
+          "median_response_ms": 380.0,
+          "avg_response_ms": 466.3562029982035,
+          "p95_response_ms": 1100.0,
+          "p99_response_ms": 1500.0,
+          "requests_per_sec": 3.1637834232384106
+        }
+      },
+      {
+        "name": "throughput_medium",
+        "status": "completed",
+        "duration_seconds": 300.5109043121338,
+        "config": {
+          "users": 20,
+          "spawn_rate": 2,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\throughput\\throughput_medium_stats.csv",
+        "summary": {
+          "total_requests": 1513,
+          "failure_count": 0,
+          "median_response_ms": 2900.0,
+          "avg_response_ms": 3002.0395157300227,
+          "p95_response_ms": 4600.0,
+          "p99_response_ms": 6100.0,
+          "requests_per_sec": 5.0652357704742785
+        }
+      },
+      {
+        "name": "throughput_high",
+        "status": "completed",
+        "duration_seconds": 300.68578457832336,
+        "config": {
+          "users": 50,
+          "spawn_rate": 5,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\throughput\\throughput_high_stats.csv",
+        "summary": {
+          "total_requests": 1532,
+          "failure_count": 0,
+          "median_response_ms": 8700.0,
+          "avg_response_ms": 8562.306097585479,
+          "p95_response_ms": 11000.0,
+          "p99_response_ms": 11000.0,
+          "requests_per_sec": 5.121081584503693
+        }
+      },
+      {
+        "name": "throughput_max",
+        "status": "completed",
+        "duration_seconds": 301.0211765766144,
+        "config": {
+          "users": 100,
+          "spawn_rate": 10,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\throughput\\throughput_max_stats.csv",
+        "summary": {
+          "total_requests": 1577,
+          "failure_count": 0,
+          "median_response_ms": 18000.0,
+          "avg_response_ms": 17138.955215408863,
+          "p95_response_ms": 21000.0,
+          "p99_response_ms": 23000.0,
+          "requests_per_sec": 5.281268252096764
+        }
+      }
+    ],
+    "resilience": [
+      {
+        "name": "resilience_steady",
+        "status": "completed",
+        "duration_seconds": 300.59584760665894,
+        "config": {
+          "users": 10,
+          "spawn_rate": 2,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\resilience\\resilience_steady_stats.csv",
+        "summary": {
+          "total_requests": 1232,
+          "failure_count": 0,
+          "median_response_ms": 1400.0,
+          "avg_response_ms": 1449.535399756893,
+          "p95_response_ms": 2400.0,
+          "p99_response_ms": 3200.0,
+          "requests_per_sec": 4.125183546201542
+        }
+      },
+      {
+        "name": "resilience_burst",
+        "status": "completed",
+        "duration_seconds": 300.55353140830994,
+        "config": {
+          "users": 30,
+          "spawn_rate": 10,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\resilience\\resilience_burst_stats.csv",
+        "summary": {
+          "total_requests": 1187,
+          "failure_count": 0,
+          "median_response_ms": 6400.0,
+          "avg_response_ms": 6478.234211120595,
+          "p95_response_ms": 8700.0,
+          "p99_response_ms": 9200.0,
+          "requests_per_sec": 3.9717696481183786
+        }
+      },
+      {
+        "name": "resilience_cascade",
+        "status": "completed",
+        "duration_seconds": 600.6292345523834,
+        "config": {
+          "users": 50,
+          "spawn_rate": 5,
+          "run_time": "10m"
+        },
+        "stats_file": "experiment_results\\resilience\\resilience_cascade_stats.csv",
+        "summary": {
+          "total_requests": 2251,
+          "failure_count": 0,
+          "median_response_ms": 11000.0,
+          "avg_response_ms": 11968.680124744993,
+          "p95_response_ms": 19000.0,
+          "p99_response_ms": 20000.0,
+          "requests_per_sec": 3.75819699402223
+        }
+      },
+      {
+        "name": "resilience_failures",
+        "status": "completed",
+        "duration_seconds": 300.52750730514526,
+        "config": {
+          "users": 20,
+          "spawn_rate": 4,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\resilience\\resilience_failures_stats.csv",
+        "summary": {
+          "total_requests": 1412,
+          "failure_count": 0,
+          "median_response_ms": 2900.0,
+          "avg_response_ms": 3073.09369369748,
+          "p95_response_ms": 4500.0,
+          "p99_response_ms": 8600.0,
+          "requests_per_sec": 4.725036813012872
+        }
+      }
+    ],
+    "scalability": [
+      {
+        "name": "scalability_small",
+        "status": "completed",
+        "duration_seconds": 180.5188694000244,
+        "config": {
+          "users": 10,
+          "spawn_rate": 2,
+          "run_time": "3m"
+        },
+        "stats_file": "experiment_results\\scalability\\scalability_small_stats.csv",
+        "summary": {
+          "total_requests": 854,
+          "failure_count": 0,
+          "median_response_ms": 1000.0,
+          "avg_response_ms": 1041.1958845438048,
+          "p95_response_ms": 1900.0,
+          "p99_response_ms": 2300.0,
+          "requests_per_sec": 4.778837069828491
+        }
+      },
+      {
+        "name": "scalability_medium",
+        "status": "completed",
+        "duration_seconds": 180.53539204597473,
+        "config": {
+          "users": 10,
+          "spawn_rate": 2,
+          "run_time": "3m"
+        },
+        "stats_file": "experiment_results\\scalability\\scalability_medium_stats.csv",
+        "summary": {
+          "total_requests": 818,
+          "failure_count": 0,
+          "median_response_ms": 1100.0,
+          "avg_response_ms": 1101.673244376562,
+          "p95_response_ms": 2000.0,
+          "p99_response_ms": 2900.0,
+          "requests_per_sec": 4.586180546541659
+        }
+      },
+      {
+        "name": "scalability_large",
+        "status": "completed",
+        "duration_seconds": 180.64879155158997,
+        "config": {
+          "users": 10,
+          "spawn_rate": 2,
+          "run_time": "3m"
+        },
+        "stats_file": "experiment_results\\scalability\\scalability_large_stats.csv",
+        "summary": {
+          "total_requests": 813,
+          "failure_count": 0,
+          "median_response_ms": 1100.0,
+          "avg_response_ms": 1139.5193774912243,
+          "p95_response_ms": 2100.0,
+          "p99_response_ms": 2600.0,
+          "requests_per_sec": 4.551878191011445
+        }
+      },
+      {
+        "name": "scalability_mixed",
+        "status": "completed",
+        "duration_seconds": 300.5915217399597,
+        "config": {
+          "users": 15,
+          "spawn_rate": 3,
+          "run_time": "5m"
+        },
+        "stats_file": "experiment_results\\scalability\\scalability_mixed_stats.csv",
+        "summary": {
+          "total_requests": 1365,
+          "failure_count": 0,
+          "median_response_ms": 2200.0,
+          "avg_response_ms": 2254.498028571692,
+          "p95_response_ms": 3500.0,
+          "p99_response_ms": 4100.0,
+          "requests_per_sec": 4.572721285249964
+        }
+      }
+    ]
+  }
+}

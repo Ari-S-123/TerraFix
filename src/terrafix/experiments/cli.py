@@ -241,7 +241,7 @@ def generate_report(args: argparse.Namespace) -> None:
 
     # Write output
     if args.output:
-        args.output.write_text(output)
+        args.output.write_text(output, encoding="utf-8")
         print(f"Report written to {args.output}")
     else:
         print(output)

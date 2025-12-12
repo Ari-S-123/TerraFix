@@ -35,7 +35,7 @@ LocalStack provides a local AWS cloud emulation that enables:
 - **Reproducibility**: Consistent local environment
 - **Offline Development**: No internet connection required
 
-**Important Limitation**: AWS Bedrock (used by TerraFix for Claude AI) is **not supported** by LocalStack. Therefore, load testing uses TerraFix's built-in **mock mode** which simulates the entire remediation pipeline without requiring real AWS Bedrock, Vanta, or GitHub APIs.
+**Important Limitation**: AWS Bedrock (used by TerraFix for Claude AI) is **not supported** by LocalStack. Therefore, load testing uses TerraFix's built-in **mock mode** which simulates the entire remediation pipeline without requiring real AWS Bedrock, Vanta, or GitHub APIs. This would've been the slowest and most expensive part of the whole pipeline because SOTA Reasoning models are slow and expensive so this was a necessary compromise.
 
 ---
 
@@ -645,71 +645,6 @@ docker-compose -f docker-compose.localstack.yml down -v
 # Full cleanup
 ./scripts/run_load_tests.sh clean
 ```
-
----
-
-## LocalStack vs AWS Comparison
-
-### Behavioral Differences
-
-| Aspect | LocalStack | AWS |
-|--------|------------|-----|
-| **Cold Starts** | Minimal (container warm) | 100-500ms typical |
-| **Latency** | Lower (no network hops) | Higher (real network) |
-| **Concurrency** | Limited by Docker | Auto-scales |
-| **Throttling** | Usually none | Service limits apply |
-| **Cost** | $0 | Real charges |
-| **Bedrock Support** | ❌ Not supported | ✅ Full support |
-
-### When to Use Each
-
-**Use LocalStack/Mock Mode For:**
-- Rapid development iteration
-- Functional testing
-- CI/CD pipeline testing
-- Offline development
-- Cost-free experimentation
-- Load testing the HTTP layer
-
-**Use AWS For:**
-- Performance validation
-- Cost estimation
-- Production-like load testing
-- Integration testing with real services
-- Pre-production verification
-
-### Interpreting LocalStack Results
-
-Results from LocalStack/mock mode testing should be interpreted as:
-
-- **Lower latencies** than production (no real network, no Bedrock)
-- **Higher throughput** than production (mocked dependencies)
-- **Consistent behavior** (no cloud variability)
-
-Use LocalStack results for:
-- Identifying code-level bottlenecks
-- Testing error handling
-- Validating load testing infrastructure
-- CI/CD quality gates
-
-For production performance estimates, apply these rules of thumb:
-- Add 100-500ms to P50 latencies for Bedrock calls
-- Reduce throughput by 50-75% for real API dependencies
-- Expect higher P99 variability in production
-
----
-
-## Next Steps
-
-After running load tests locally:
-
-1. **Analyze Results**: Review HTML reports and identify bottlenecks
-2. **Tune Configuration**: Adjust worker counts, timeouts, retry policies
-3. **Deploy to AWS**: Use Terraform in `terraform/` directory
-4. **Production Testing**: Run tests against deployed service
-5. **Continuous Testing**: Integrate into CI/CD pipeline
-
-For deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).
 
 ---
 

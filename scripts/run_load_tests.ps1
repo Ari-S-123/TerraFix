@@ -13,7 +13,7 @@
 .PARAMETER Experiment
     Experiment type: throughput, resilience, scalability, all (default: all)
 
-.PARAMETER Host
+.PARAMETER TargetHost
     Target host URL (default: http://localhost:8081)
 
 .PARAMETER OutputDir
@@ -61,8 +61,8 @@ param(
     [ValidateSet("throughput", "resilience", "scalability", "all")]
     [string]$Experiment = "all",
 
-    [Alias("h")]
-    [string]$Host = "http://localhost:8081",
+    [Alias("t")]
+    [string]$TargetHost = "http://localhost:8081",
 
     [Alias("o")]
     [string]$OutputDir = ".\experiment_results",
@@ -190,7 +190,7 @@ function Start-Environment {
 
     # Wait for services
     Start-Sleep -Seconds 5
-    Wait-ForService -Url "$Host/health" -MaxAttempts 60 | Out-Null
+    Wait-ForService -Url "$TargetHost/health" -MaxAttempts 60 | Out-Null
 
     # Check Redis
     $redisPing = docker exec terrafix-redis redis-cli ping 2>$null
@@ -214,7 +214,7 @@ function Start-Environment {
     }
 
     Write-Success "Local testing environment is ready!"
-    Write-Info "TerraFix API: $Host"
+    Write-Info "TerraFix API: $TargetHost"
     Write-Info "Redis: localhost:6379"
     Write-Info "LocalStack: http://localhost:4566"
 }
@@ -245,7 +245,7 @@ function Get-Status {
 
     # TerraFix API
     try {
-        $apiHealth = Invoke-WebRequest -Uri "$Host/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $apiHealth = Invoke-WebRequest -Uri "$TargetHost/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
         if ($apiHealth.StatusCode -eq 200) {
             Write-Host "  TerraFix API: " -NoNewline
             Write-Host "healthy" -ForegroundColor Green
@@ -300,7 +300,7 @@ function Start-LoadTest {
 
     # Check if API server is running
     try {
-        $apiHealth = Invoke-WebRequest -Uri "$Host/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $apiHealth = Invoke-WebRequest -Uri "$TargetHost/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
     }
     catch {
         Write-Error "TerraFix API server is not running. Start it with: .\run_load_tests.ps1 start"
@@ -316,7 +316,7 @@ function Start-LoadTest {
         Write-Info "Starting Locust with web UI at http://localhost:8089"
         $locustArgs = @(
             "-f", $locustFile,
-            "--host", $Host
+            "--host", $TargetHost
         )
     }
     else {
@@ -325,7 +325,7 @@ function Start-LoadTest {
 
         $locustArgs = @(
             "-f", $locustFile,
-            "--host", $Host,
+            "--host", $TargetHost,
             "--headless",
             "--csv", $csvPath,
             "--html", $htmlPath,
@@ -367,7 +367,7 @@ function Start-AllTests {
     $env:MOCK_LATENCY_MS = $Latency
 
     python -m terrafix.experiments.run_experiments `
-        --host $Host `
+        --host $TargetHost `
         --output $OutputDir `
         --experiment $Experiment
 
