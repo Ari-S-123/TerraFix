@@ -170,6 +170,12 @@ def test_process_failure_success(
 pytest tests/integration/
 ```
 
+> **⚠️ Note on Vanta Integration Testing**
+>
+> Full end-to-end testing with the Vanta API is currently **not possible** without enterprise API access. Vanta does not offer self-service signup—you must [request a demo](https://www.vanta.com/pricing) and engage with their sales team to obtain API credentials. This process can take a while.
+>
+> As a result, Vanta client tests use mocked responses based on [Vanta's public API documentation](https://developer.vanta.com/reference). If you have access to a Vanta enterprise account with API credentials, you can run live integration tests by setting the `VANTA_API_TOKEN` environment variable.
+
 ### Manual Testing
 
 ```bash
@@ -198,7 +204,7 @@ python -m terrafix.cli process-once --failure-json test_failure.json
 For performance testing and benchmarking:
 
 ```bash
-# Run throughput experiment
+# Run throughput experiment (in-process)
 python -m terrafix.experiments run --type throughput --preset baseline
 
 # Run resilience test with 20% failure injection
@@ -210,6 +216,46 @@ python -m terrafix.experiments run --type scalability
 # List available presets
 python -m terrafix.experiments list-presets
 ```
+
+### Load Testing with Locust
+
+For realistic load testing against deployed services:
+
+```bash
+# Start mock API server for local load testing
+TERRAFIX_MOCK_MODE=true python -m terrafix.api_server
+
+# Run Locust with web UI (opens http://localhost:8089)
+cd src/terrafix/experiments
+locust -f locustfile.py --host=http://localhost:8081
+
+# Headless throughput test
+TERRAFIX_EXPERIMENT=throughput locust -f locustfile.py \
+    --host=http://localhost:8081 --headless \
+    --users 50 --spawn-rate 5 --run-time 5m --csv=results
+
+# Run all experiments with automated runner
+python -m terrafix.experiments.run_experiments --local
+
+# Run against deployed service
+python -m terrafix.experiments.run_experiments \
+    --host https://your-terrafix.amazonaws.com:8081
+```
+
+#### Experiment Types
+
+- **throughput**: Measure max sustainable throughput, identify bottlenecks
+- **resilience**: Test steady-state, burst, cascade workloads
+- **scalability**: Test with small/medium/large repository profiles
+- **burst**: High-volume spike testing
+- **cascade**: Exponentially increasing load
+
+#### Generating Reports
+
+After running experiments, charts and reports are automatically generated:
+- `experiment_results/experiment_summary.html` - Summary report
+- `experiment_results/charts/` - PNG charts
+- `experiment_results/charts_report.html` - Charts with analysis
 
 ## Making Changes
 
@@ -368,6 +414,7 @@ terrafix/
 │   ├── resource_mappings.py   # AWS to Terraform mappings
 │   ├── orchestrator.py        # Main processing pipeline
 │   ├── service.py             # Long-running service
+│   ├── api_server.py          # Load testing API server
 │   └── experiments/           # Experiment harness
 │       ├── __init__.py        # Package exports
 │       ├── __main__.py        # CLI entry point
@@ -376,7 +423,10 @@ terrafix/
 │       ├── generator.py       # Synthetic failure generator
 │       ├── injector.py        # Failure injection
 │       ├── reporter.py        # Results reporting
-│       └── runner.py          # Experiment orchestration
+│       ├── runner.py          # Experiment orchestration
+│       ├── locustfile.py      # Locust load tests
+│       ├── run_experiments.py # Automated experiment runner
+│       └── charts.py          # Chart generation
 ├── tests/                     # Test suite
 │   ├── conftest.py            # Shared pytest fixtures
 │   ├── fixtures/              # Test data

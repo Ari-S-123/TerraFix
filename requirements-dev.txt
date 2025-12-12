@@ -8,3 +8,8 @@ types-requests>=2.31.0
 vcrpy>=6.0.0
 responses>=0.24.0
 fakeredis>=2.20.0
+
+# Load testing and visualization
+locust>=2.20.0
+matplotlib>=3.7.0
+numpy>=1.24.0

@@ -29,7 +29,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 
 ## Prerequisites
 
-- **Python 3.14** (yes, it exists as of November 2025)
+- **Python 3.14**
 - **AWS Account** with Bedrock access in us-west-2
 - **Vanta Account** with API access (OAuth token with `vanta-api.all:read`)
 - **GitHub Account** with Personal Access Token (repo scope)
@@ -144,6 +144,7 @@ Each PR includes:
 - **Polling-Based**: 5-minute polling interval (Vanta webhooks not available)
 - **No Terraform Plan**: Runs `terraform fmt` and `terraform validate`; does not run `terraform plan` prior to PR creation
 - **Terraform Binary Required for Validation**: If terraform is unavailable, validation falls back to skip with warnings
+- **Vanta API Access**: Vanta is an enterprise compliance platform that requires [requesting a demo](https://www.vanta.com/pricing) rather than self-service signup. This means obtaining API credentials for end-to-end testing requires enterprise engagement, which ended up not being feasible within the project timeline. As a result, **full end-to-end testing with the live production Vanta API could not be performed in time for the project submission**. The Vanta client implementation is based on Vanta's public API documentation and mocked unit tests.
 
 ## Development
 
@@ -214,7 +215,9 @@ Available metrics:
 
 ## Experiment Harness
 
-TerraFix includes an experiment harness for performance testing and benchmarking:
+TerraFix includes a comprehensive experiment harness for performance testing and benchmarking, featuring both in-process experiments and Locust-based load testing against deployed services.
+
+### In-Process Experiments
 
 ```bash
 # Run throughput experiment
@@ -233,11 +236,60 @@ python -m terrafix.experiments run --type scalability
 python -m terrafix.experiments list-presets
 ```
 
+### Locust Load Testing (Recommended for Deployed Services)
+
+For load testing against actual deployed TerraFix instances, we provide Locust-based tests:
+
+```bash
+# Start the mock API server for local testing
+TERRAFIX_MOCK_MODE=true python -m terrafix.api_server
+
+# Run Locust with web UI (http://localhost:8089)
+cd src/terrafix/experiments
+locust -f locustfile.py --host=http://localhost:8081
+
+# Run headless throughput test
+TERRAFIX_EXPERIMENT=throughput locust -f locustfile.py \
+    --host=http://localhost:8081 --headless \
+    --users 50 --spawn-rate 5 --run-time 5m --csv=results
+
+# Run all experiments with automated runner
+python -m terrafix.experiments.run_experiments --local
+
+# Run against deployed AWS service
+python -m terrafix.experiments.run_experiments \
+    --host https://your-terrafix.amazonaws.com:8081
+```
+
+### Experiment Types
+
+The load testing implements the three experiments from the specification:
+
+1. **Throughput**: Measure maximum sustainable throughput, P50/P95/P99 latencies
+2. **Resilience**: Test steady-state, burst, and cascade workloads with deduplication verification
+3. **Scalability**: Test with small/medium/large repository profiles
+
 ### Workload Profiles
 
 - **STEADY_STATE**: Constant rate of failures (baseline testing)
 - **BURST**: Periodic high-volume spikes (stress testing)
 - **CASCADE**: Exponentially increasing load (finding limits)
+- **MIXED**: Production-like traffic patterns
+
+### Chart Generation
+
+After running experiments, generate visualization charts:
+
+```bash
+# Charts are auto-generated in experiment results directory
+# Or manually generate from CSV/JSON results
+python -c "
+from terrafix.experiments.charts import generate_report_from_files
+generate_report_from_files(['results_stats.csv'], 'charts/', html=True)
+"
+```
+
+Available charts: latency distribution, percentile plots, throughput timeline, success/failure rates, comparison charts, and HTML reports.
 
 ## CI/CD
 

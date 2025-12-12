@@ -198,7 +198,39 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - Reporter for single and comparison experiment outputs
   - CLI entry point (`python -m terrafix.experiments`)
 
-### 19. Testing & CI ✅
+### 19. Locust Load Testing ✅
+- **Location**: `src/terrafix/experiments/locustfile.py`, `run_experiments.py`
+- **Features**:
+  - `ThroughputUser`: Steady-state throughput measurement
+  - `BurstUser`: High-volume spike testing
+  - `ResilienceUser`: Deduplication and failure resilience
+  - `CascadeUser`: Exponentially increasing load
+  - `ScalabilityUser`: Varying repository sizes
+  - `MixedWorkloadUser`: Production-like traffic patterns
+  - Automated experiment runner with preset configurations
+  - CSV and HTML report generation
+
+### 20. API Server for Load Testing ✅
+- **Location**: `src/terrafix/api_server.py`
+- **Features**:
+  - HTTP webhook endpoints (`/webhook`, `/batch`)
+  - Mock mode for testing without external services
+  - Configurable latency and failure rates
+  - Real-time statistics and Prometheus metrics
+  - Health check endpoints (`/health`, `/ready`, `/status`)
+
+### 21. Chart Generation ✅
+- **Location**: `src/terrafix/experiments/charts.py`
+- **Features**:
+  - Latency distribution histograms
+  - Percentile charts (P50, P95, P99)
+  - Throughput timeline graphs
+  - Success/failure pie charts
+  - Multi-experiment comparison charts
+  - HTML report generation with embedded charts
+  - Support for JSON and Locust CSV input formats
+
+### 22. Testing & CI ✅
 - **Location**: `tests/unit/`, `.github/workflows/ci.yml`
 - **Features**:
   - Unit tests for config, Vanta client, Terraform analyzer, remediation generator, GitHub PR creator, state store, and orchestrator
@@ -206,7 +238,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
   - CI pipeline running ruff lint/format checks, mypy, pytest with coverage, Codecov upload
   - Dummy environment variables wired for CI test execution
 
-### 20. Documentation ✅
+### 23. Documentation ✅
 - **Files Created**:
   - `README.md`: Main project documentation
   - `DEPLOYMENT_GUIDE.md`: Step-by-step deployment
@@ -250,7 +282,12 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 - Unit tests cover configuration, API clients, Terraform parsing, remediation generation, PR creation, state store, and orchestration error paths.
 - Fixtures include Terraform corpora across small/medium/large to exercise parser and mapping logic.
 - CI runs ruff (lint + format check), mypy, pytest with coverage, and uploads coverage to Codecov.
-- Experiment harness provides synthetic workloads and percentile timing but experiment results still need to be run and published.
+- **Load Testing**: Locust-based load tests for the three spec experiments:
+  1. Pipeline Throughput and Bottleneck Identification
+  2. Concurrency and Failure Resilience
+  3. Repository Analysis Scalability
+- Automated experiment runner (`run_experiments.py`) orchestrates complete test suites
+- Chart generation for results visualization and analysis
 
 ## Environment Requirements
 
@@ -288,10 +325,22 @@ terrafix/
 │   ├── secure_git.py           # Secure git operations
 │   ├── terraform_validator.py  # terraform fmt/validate helper
 │   ├── health_check.py         # HTTP health endpoints
+│   ├── api_server.py           # Load testing API server
 │   ├── orchestrator.py         # Main processing pipeline
 │   ├── service.py              # Long-running worker
 │   ├── cli.py                  # CLI interface
-│   └── __main__.py             # Module entry point
+│   ├── __main__.py             # Module entry point
+│   └── experiments/            # Experiment harness
+│       ├── __init__.py         # Package exports
+│       ├── generator.py        # Synthetic failure generator
+│       ├── profiles.py         # Workload profiles
+│       ├── injector.py         # Failure injection
+│       ├── runner.py           # Experiment runner
+│       ├── reporter.py         # Results reporter
+│       ├── locustfile.py       # Locust load tests
+│       ├── run_experiments.py  # Automated experiment runner
+│       ├── charts.py           # Chart generation
+│       └── cli.py              # Experiments CLI
 ├── terraform/                  # Infrastructure as code
 │   ├── main.tf                 # Provider config
 │   ├── variables.tf            # Input variables
@@ -303,6 +352,10 @@ terrafix/
 │   ├── networking.tf           # Network variables
 │   ├── outputs.tf              # Resource outputs
 │   └── README.md               # Infrastructure docs
+├── tests/                      # Test suite
+│   ├── conftest.py             # Pytest fixtures
+│   ├── unit/                   # Unit tests
+│   └── fixtures/               # Test data
 ├── pyproject.toml              # Python project config
 ├── requirements.txt            # Production dependencies
 ├── requirements-dev.txt        # Development dependencies
@@ -317,13 +370,6 @@ terrafix/
 └── IMPLEMENTATION_SUMMARY.md   # This file
 ```
 
-## Lines of Code
-
-Approximately 4,500 lines of production Python code across all modules, plus:
-- 500+ lines of Terraform
-- 1,000+ lines of documentation
-- Comprehensive inline documentation throughout
-
 ## Next Steps
 
 To use TerraFix:
@@ -334,6 +380,22 @@ To use TerraFix:
 4. **Deploy to ECS**: Follow `DEPLOYMENT_GUIDE.md` for AWS deployment
 5. **Monitor**: View CloudWatch logs for processing activity
 
+### Running Load Tests
+
+1. **Local Mock Testing**:
+   ```bash
+   TERRAFIX_MOCK_MODE=true python -m terrafix.api_server
+   python -m terrafix.experiments.run_experiments --local
+   ```
+
+2. **Against Deployed Service**:
+   ```bash
+   python -m terrafix.experiments.run_experiments \
+       --host https://your-terrafix.amazonaws.com:8081
+   ```
+
+3. **View Results**: Check `experiment_results/` for charts and reports
+
 ## Known Limitations
 
 1. **Polling-Only**: Vanta webhooks not yet supported; relies on 5-minute polling.
@@ -342,6 +404,7 @@ To use TerraFix:
 4. **Limited Resource Examples**: Fix prompts focus on common AWS services; broader coverage not yet curated.
 5. **No Cost Analysis**: Infracost/cost impact estimation not integrated.
 6. **No Learning Loop**: Reviewer feedback not yet captured for model tuning.
+7. **No End-to-End Testing with Live Vanta API**: Vanta is an enterprise compliance platform that requires [requesting a demo](https://www.vanta.com/pricing) rather than self-service signup. Obtaining API credentials requires enterprise-level engagement with Vanta's sales team, which was not feasible within the project timeline. The Vanta client implementation is based on [Vanta's public API documentation](https://developer.vanta.com/reference) and validated via mocked unit tests only.
 
 ## Success Criteria
 

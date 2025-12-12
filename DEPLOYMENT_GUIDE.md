@@ -18,11 +18,17 @@ This guide provides step-by-step instructions for deploying TerraFix in producti
 
 - **Python 3.14**: TerraFix requires Python 3.14 (released November 2025)
 - **AWS Account**: With Bedrock access in us-west-2
-- **Vanta Account**: OAuth token with `vanta-api.all:read` scope
+- **Vanta Account**: OAuth token with `vanta-api.all:read` scope (**see important note below**)
 - **GitHub Account**: Personal access token with `repo` scope
 - **Redis**: Production-ready Redis endpoint (Terraform deploys ElastiCache)
 - **Git**: For repository cloning operations
 - **Terraform CLI**: For infrastructure provisioning (optional for local dev)
+
+> **⚠️ Important: Vanta API Access**
+>
+> Vanta is an enterprise compliance platform that does **not** offer self-service signup. To obtain API credentials, you must [request a demo](https://www.vanta.com/pricing) and work with Vanta's sales team. This process can take a while.
+>
+> During development of TerraFix, full end-to-end testing with a live Vanta API could not be performed before code freeze due to time constraints in obtaining enterprise API access. The Vanta client implementation is based on [Vanta's public API documentation](https://developer.vanta.com/reference) and validated via mocked unit tests.
 
 ### Optional
 
@@ -263,7 +269,7 @@ The `GITHUB_REPO_MAPPING` environment variable maps AWS resources to GitHub repo
 
 ### Health Check Endpoints
 
-TerraFix exposes several HTTP endpoints on port 8080:
+TerraFix exposes several HTTP endpoints on port 8080 (main service):
 
 | Endpoint | Purpose | Response |
 |----------|---------|----------|
@@ -278,6 +284,33 @@ curl http://localhost:8080/health
 
 # View metrics
 curl http://localhost:8080/metrics | jq .
+```
+
+### Load Testing API Server
+
+For load testing, TerraFix provides a separate API server on port 8081 that accepts webhook-style requests:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/webhook` | POST | Process a single compliance failure |
+| `/batch` | POST | Process multiple failures in batch |
+| `/health` | GET | Liveness check |
+| `/ready` | GET | Readiness check |
+| `/status` | GET | Detailed status with processing stats |
+| `/metrics` | GET | Prometheus-format metrics |
+| `/configure` | POST | Runtime configuration (mock mode) |
+
+```bash
+# Start API server in mock mode for load testing
+TERRAFIX_MOCK_MODE=true TERRAFIX_API_PORT=8081 python -m terrafix.api_server
+
+# Submit a test failure
+curl -X POST http://localhost:8081/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"test_id": "test-123", "resource_arn": "arn:aws:s3:::bucket"}'
+
+# View load test metrics
+curl http://localhost:8081/status | jq .
 ```
 
 ### Metrics
@@ -463,6 +496,98 @@ aws cloudwatch get-metric-statistics \
 **Solution**: Increase memory in `terraform/variables.tf`:
 ```hcl
 memory = 8192 # 8 GB
+```
+
+## Load Testing
+
+TerraFix includes comprehensive load testing capabilities using Locust. This allows you to benchmark performance before production deployment and identify bottlenecks.
+
+### Local Load Testing
+
+```bash
+# Install load testing dependencies
+pip install -r requirements-dev.txt
+
+# Start mock API server (simulates processing without external services)
+TERRAFIX_MOCK_MODE=true python -m terrafix.api_server
+
+# In another terminal, run Locust with web UI
+cd src/terrafix/experiments
+locust -f locustfile.py --host=http://localhost:8081
+# Open http://localhost:8089 to configure and run tests
+```
+
+### Headless Load Testing
+
+```bash
+# Run throughput test (5 minutes, 50 users)
+TERRAFIX_EXPERIMENT=throughput locust -f locustfile.py \
+    --host=http://localhost:8081 --headless \
+    --users 50 --spawn-rate 5 --run-time 5m \
+    --csv=results/throughput
+
+# Run burst/stress test
+TERRAFIX_EXPERIMENT=burst locust -f locustfile.py \
+    --host=http://localhost:8081 --headless \
+    --users 30 --spawn-rate 10 --run-time 5m \
+    --csv=results/burst
+
+# Run cascade test (exponentially increasing load)
+TERRAFIX_EXPERIMENT=cascade locust -f locustfile.py \
+    --host=http://localhost:8081 --headless \
+    --users 50 --spawn-rate 5 --run-time 10m \
+    --csv=results/cascade
+```
+
+### Running Against Deployed Service
+
+```bash
+# Run experiments against deployed TerraFix
+python -m terrafix.experiments.run_experiments \
+    --host https://your-terrafix.amazonaws.com:8081 \
+    --experiment throughput \
+    --output ./experiment_results
+
+# Run all experiments
+python -m terrafix.experiments.run_experiments \
+    --host https://your-terrafix.amazonaws.com:8081 \
+    --experiment all \
+    --output ./experiment_results
+```
+
+### Experiment Types
+
+| Type | Description | Users | Duration |
+|------|-------------|-------|----------|
+| `throughput` | Measure max sustainable throughput | 5-100 | 3-5m |
+| `resilience` | Test with failure injection | 10-50 | 5-10m |
+| `scalability` | Vary repository sizes | 10-15 | 3-5m |
+| `burst` | High-volume spikes | 30 | 5m |
+| `cascade` | Exponentially increasing | 50 | 10m |
+
+### Generating Reports
+
+```bash
+# Reports are auto-generated when using run_experiments.py
+# Results include:
+# - experiment_summary.json (raw data)
+# - experiment_summary.html (formatted report)
+# - charts/ directory with PNG visualizations
+# - charts_report.html (charts with analysis)
+```
+
+### Mock Mode Configuration
+
+The API server supports runtime configuration for load testing:
+
+```bash
+# Configure mock latency (ms) and failure rate
+curl -X POST http://localhost:8081/configure \
+  -H "Content-Type: application/json" \
+  -d '{"latency_ms": 200, "failure_rate": 0.1}'
+
+# Reset statistics
+curl http://localhost:8081/stats/reset
 ```
 
 ## Security Best Practices

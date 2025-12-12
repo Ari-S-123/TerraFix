@@ -19,6 +19,9 @@ I started with SQLite for state, but it was ephemeral. Every time a worker resta
 **Unbounded tail latency:**
 Sometimes Bedrock or GitHub would spike, and the worker would just hang. Implementing token-bucket rate limiting, the metrics collector with p50/p95/p99 timings, and backoffs made those long tails explicit.
 
+**Vanta API access wall:**
+A major roadblock I didn't anticipate: Vanta doesn't offer self-service signup. You have to [request a demo](https://www.vanta.com/pricing) and go through their enterprise sales process to get API credentials. This meant I couldn't do a proper end-to-end test with a live Vanta environment within the project timeline. The Vanta client is implemented based on their public API docs and tested with mocks, but I never got to validate against real compliance failure data from a live Vanta account. This is a significant gap—if I were to continue this project, securing enterprise API access would be the first priority.
+
 ## Concepts from the Course Applied Here
 *   **Event thinking vs. CRUD:** Vanta failures come in as a stream, so TerraFix effectively builds a read model (deduped failures + PR state). It feels a lot like the event-sourcing/CQRS split we discussed.
 *   **CAP and eventual consistency:** Since I'm polling, I have to accept some staleness. Redis gives me consistency for claims, but PR visibility is eventually consistent until GitHub catches up. For compliance work, that latency is a tradeoff I'm willing to make.
