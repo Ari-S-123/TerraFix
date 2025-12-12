@@ -1,6 +1,6 @@
 # TerraFix: AI-Powered Terraform Compliance Remediation Bot
 
-**TerraFix** is a long-running service that automatically detects Vanta compliance failures, analyzes Terraform configurations, generates compliant fixes using Claude Sonnet 4.5 via AWS Bedrock, and opens GitHub Pull Requests for human review.
+**TerraFix** is a long-running service that automatically detects Vanta compliance failures, analyzes Terraform configurations, generates compliant fixes using Claude Opus 4.5 via AWS Bedrock, and opens GitHub Pull Requests for human review.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
                Health Check (HTTP)
 ```
 
-**Key Differentiator**: Human-in-the-loop architecture. No direct AWS access required. We work at the Infrastructure-as-Code layer where changes belong, not directly on cloud resources.
+**Key Differentiator**: Human-in-the-loop architecture. No direct AWS access required. This is meant to work at the Infrastructure-as-Code layer where changes belong, not directly on cloud resources.
 
 ## Components
 
@@ -30,10 +30,10 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 ## Prerequisites
 
 - **Python 3.14**
-- **AWS Account** with Bedrock access in us-west-2
+- **AWS Account** with Bedrock access
 - **Vanta Account** with API access (OAuth token with `vanta-api.all:read`)
 - **GitHub Account** with Personal Access Token (repo scope)
-- **Redis** endpoint (ElastiCache recommended for production)
+- **Redis** endpoint
 
 ## Configuration
 
@@ -98,7 +98,7 @@ docker run --env-file .env terrafix:latest
 
 ## ECS/Fargate Deployment
 
-We provide Terraform modules to deploy TerraFix as a single-task Fargate service:
+Terraform modules to deploy TerraFix as a single-task Fargate service:
 
 ```bash
 cd terraform
@@ -140,7 +140,7 @@ Each PR includes:
 
 ## Limitations
 
-- **Terraform-Only**: Currently only supports Terraform (CloudFormation/Pulumi support planned)
+- **Terraform-Only**: Currently only supports Terraform (CloudFormation/Pulumi support could be added later)
 - **Polling-Based**: 5-minute polling interval (Vanta webhooks not available)
 - **No Terraform Plan**: Runs `terraform fmt` and `terraform validate`; does not run `terraform plan` prior to PR creation
 - **Terraform Binary Required for Validation**: If terraform is unavailable, validation falls back to skip with warnings
@@ -319,15 +319,6 @@ See `.github/workflows/ci.yml` for the full pipeline configuration.
 - Read-only Vanta API access (no write permissions needed)
 - Secure Git cloning via credential helper (tokens not exposed in process args)
 
-## Support
-
-For issues, questions, or contributions, see the project repository.
-
-## License
-
-MIT License - see LICENSE file for details.
-
 ---
 
-**Built with Python 3.14, Claude Sonnet 4.5, and a commitment to keeping humans in the loop.**
-
+**Built with Python 3.14, Claude Opus 4.5, and a commitment to keeping humans in the loop.**

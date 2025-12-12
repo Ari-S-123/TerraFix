@@ -2,7 +2,7 @@
 TerraFix: AI-Powered Terraform Compliance Remediation Bot.
 
 TerraFix monitors Vanta compliance failures, analyzes Terraform configurations,
-generates compliant fixes using Claude Sonnet 4.5 via AWS Bedrock, and opens
+generates compliant fixes using Claude Opus 4.5 via AWS Bedrock, and opens
 GitHub Pull Requests for human review. This human-in-the-loop architecture
 ensures that compliance fixes are reviewed before being applied to infrastructure.
 

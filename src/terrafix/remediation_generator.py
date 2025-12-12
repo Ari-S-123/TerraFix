@@ -156,7 +156,7 @@ You always respond with valid JSON containing the fix details. You never include
         Example:
             >>> generator = TerraformRemediationGenerator()
             >>> generator = TerraformRemediationGenerator(
-            ...     model_id="anthropic.claude-sonnet-4-20250514-v1:0",
+            ...     model_id="anthropic.claude-opus-4-5-20251101-v1:0",
             ...     region="us-east-1",
             ...     read_timeout_seconds=1800  # 30 minutes for simpler tasks
             ... )

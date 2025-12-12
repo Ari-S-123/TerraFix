@@ -85,7 +85,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 ### 8. Bedrock Remediation Generator ✅
 - **Location**: `src/terrafix/remediation_generator.py`
 - **Features**:
-  - Claude Sonnet 4.5 via AWS Bedrock
+  - Claude Opus 4.5 via AWS Bedrock
   - Comprehensive prompt construction
   - Embedded Terraform documentation snippets
   - Temperature 0.1 for deterministic fixes
@@ -302,7 +302,7 @@ Vanta Platform → TerraFix Worker → AWS Bedrock Claude → GitHub PR
 ### AWS Services
 - ECS/Fargate
 - ECR
-- Bedrock (Claude Sonnet 4.5 in us-west-2)
+- Bedrock (Claude Opus 4.5 in us-west-2)
 - Secrets Manager
 - CloudWatch Logs
 - IAM

@@ -4,7 +4,7 @@
 
 **Problem**: Delve and similar tools face critical issues: autonomous AWS changes create permission nightmares, lack human oversight, and are conceptually problematic for production environments. Most codebases use Infrastructure as Code that can be fixed at the source.
 
-**Solution**: TerraFix focuses exclusively on Terraform-based infrastructure. When Vanta detects compliance failures, I'll analyze the existing Terraform configuration, generate a compliant fix using Claude Sonnet 4.5 via AWS Bedrock, and open a GitHub Pull Request for human review. This sidesteps permission issues entirely - the only permissions I need are Vanta API access (read-only) and GitHub PR creation.
+**Solution**: TerraFix focuses exclusively on Terraform-based infrastructure. When Vanta detects compliance failures, I'll analyze the existing Terraform configuration, generate a compliant fix using Claude Opus 4.5 via AWS Bedrock, and open a GitHub Pull Request for human review. This sidesteps permission issues entirely - the only permissions I need are Vanta API access (read-only) and GitHub PR creation.
 
 **Key Differentiator from Delve**: Human-in-the-loop architecture. No direct AWS access required. I work at the IaC layer where changes belong.
 
@@ -36,7 +36,7 @@ flowchart TB
     subgraph Service["TerraFix Service (Python 3.14)"]
         P[Polling Worker<br/>or Webhook Endpoint]
         A[Analysis Engine]
-        B[AWS Bedrock<br/>Claude Sonnet 4.5]
+        B[AWS Bedrock<br/>Claude Opus 4.5]
         T[Terraform Parser]
         G[GitHub PR Creator]
     end
@@ -480,7 +480,7 @@ class TerraformRemediationGenerator:
         Initialize Bedrock Claude client.
         
         Args:
-            model_id: Claude model ID (default: Sonnet 4.5)
+            model_id: Claude model ID (default: Opus 4.5)
             region: AWS region for Bedrock
         """
         self.bedrock_client = boto3.client(
@@ -680,7 +680,7 @@ resource "aws_iam_role" "example" {
     
     def _invoke_claude(self, prompt: str) -> Dict:
         """
-        Call Bedrock to invoke Claude Sonnet 4.5.
+        Call Bedrock to invoke Claude Opus 4.5.
         
         Args:
             prompt: Constructed prompt with failure context
@@ -1374,4 +1374,4 @@ export POLL_INTERVAL_SECONDS="300"
 
 ---
 
-*Built with Python 3.14, Claude Sonnet 4.5, and a commitment to keeping humans in the loop.*
+*Built with Python 3.14, Claude Opus 4.5, and a commitment to keeping humans in the loop.*

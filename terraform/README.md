@@ -193,7 +193,7 @@ aws logs start-query \
 - Fargate (2 vCPU, 4GB, 24/7): ~$60
 - ElastiCache Redis (cache.t3.micro, single node): ~$15
 - CloudWatch Logs (10 GB/month): ~$5
-- Bedrock (Claude Sonnet 4.5): Variable (per-token pricing)
+- Bedrock (Claude Opus 4.5): Variable (per-token pricing)
 - Secrets Manager (2 secrets): ~$1
 - ECR storage (< 10 images): ~$0.10
 
