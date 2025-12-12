@@ -69,6 +69,7 @@ __all__ = [
     "ExperimentRunner",
 ]
 
+
 # Lazy imports for optional dependencies (charts require matplotlib)
 def __getattr__(name: str) -> object:
     """
@@ -82,11 +83,14 @@ def __getattr__(name: str) -> object:
     """
     if name == "ExperimentChartGenerator":
         from .charts import ExperimentChartGenerator
+
         return ExperimentChartGenerator
     if name == "ChartConfig":
         from .charts import ChartConfig
+
         return ChartConfig
     if name == "ExperimentData":
         from .charts import ExperimentData
+
         return ExperimentData
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

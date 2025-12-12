@@ -41,13 +41,16 @@ class TestSettingsValidation:
         """Test that missing VANTA_API_TOKEN raises error."""
         monkeypatch.setenv("GITHUB_TOKEN", "test_token")
         monkeypatch.setenv("AWS_REGION", "us-west-2")
-        # Don't set VANTA_API_TOKEN
-        monkeypatch.delenv("VANTA_API_TOKEN", raising=False)
+        # Set VANTA_API_TOKEN to empty string to trigger validation error
+        # (deleting it might still allow .env file to provide a value)
+        monkeypatch.setenv("VANTA_API_TOKEN", "")
 
         get_settings.cache_clear()
 
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(ConfigurationError) as exc_info:
             _ = Settings()  # pyright: ignore[reportCallIssue]
+
+        assert "VANTA_API_TOKEN" in str(exc_info.value)
 
     def test_invalid_log_level_raises(
         self,
@@ -174,12 +177,15 @@ class TestGitHubRepoMapping:
 
     def test_get_repo_for_resource_no_match(
         self,
-        mock_env_vars: dict[str, str],
         monkeypatch: MonkeyPatch,
     ) -> None:
         """Test None returned when no mapping found."""
-        # Fixture used for side effects
-        _ = mock_env_vars
+        # Set up all required env vars explicitly without using mock_env_vars fixture
+        # to avoid any contamination from fixtures or .env files
+        monkeypatch.setenv("VANTA_API_TOKEN", "test_vanta_token")
+        monkeypatch.setenv("GITHUB_TOKEN", "test_github_token")
+        monkeypatch.setenv("AWS_REGION", "us-west-2")
+        # Use a mapping without a "default" key
         mapping = json.dumps({
             "arn:aws:s3:::specific-": "myorg/specific-repo",
         })
@@ -187,7 +193,9 @@ class TestGitHubRepoMapping:
 
         get_settings.cache_clear()
 
-        settings = Settings()  # pyright: ignore[reportCallIssue]
+        # Pass _env_file=None to prevent Pydantic from reading .env file
+        # which might contain a default GITHUB_REPO_MAPPING
+        settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
         repo = settings.get_repo_for_resource("arn:aws:s3:::other-bucket")
         assert repo is None

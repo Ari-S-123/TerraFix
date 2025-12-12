@@ -516,10 +516,11 @@ def _process_failure_once(
         # would block remediation.
         try:
             relative_file_path = file_path_obj.relative_to(repo_root)
-        except Exception:
+        except ValueError:
+            # Path is not relative to repo_root, try os.path.relpath
             try:
                 relative_file_path = Path(os.path.relpath(file_path_obj, repo_root))
-            except Exception:
+            except ValueError:
                 # Final fallback: just use the filename so PR creation can proceed.
                 relative_file_path = Path(file_path_obj.name)
 

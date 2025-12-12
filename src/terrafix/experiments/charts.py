@@ -36,14 +36,14 @@ from pathlib import Path
 from typing import Any
 
 # Import matplotlib with non-interactive backend for server-side rendering
-import matplotlib  # type: ignore[import-untyped]
+import matplotlib
 
 matplotlib.use("Agg")  # Must be before pyplot import
 
-import matplotlib.pyplot as plt  # type: ignore[import-untyped]
-import matplotlib.dates as mdates  # type: ignore[import-untyped]
-from matplotlib.figure import Figure  # type: ignore[import-untyped]
-from matplotlib.axes import Axes  # type: ignore[import-untyped]  # noqa: F401
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from matplotlib.axes import Axes  # noqa: F401
+from matplotlib.figure import Figure
 
 
 @dataclass
@@ -305,7 +305,7 @@ class ExperimentChartGenerator:
 
                 color = self.config.color_palette[i % len(self.config.color_palette)]
                 ax.plot(
-                    times,
+                    times,  # type: ignore[arg-type]
                     values,
                     color=color,
                     linewidth=2,
@@ -314,8 +314,8 @@ class ExperimentChartGenerator:
                     markersize=3,
                 )
 
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))  # type: ignore[no-untyped-call]
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())  # type: ignore[no-untyped-call]
         fig.autofmt_xdate()
 
         ax.set_xlabel("Time", fontsize=self.config.font_size)
@@ -345,7 +345,7 @@ class ExperimentChartGenerator:
         if len(self.data_list) == 1:
             axes = [axes]
 
-        for i, (ax, data) in enumerate(zip(axes, self.data_list)):
+        for _i, (ax, data) in enumerate(zip(axes, self.data_list, strict=False)):
             total = data.success_count + data.failure_count
             if total > 0:
                 sizes = [data.success_count, data.failure_count]
@@ -399,7 +399,10 @@ class ExperimentChartGenerator:
             rate = d.success_count / total * 100 if total > 0 else 0
             success_rates.append(rate)
 
-        colors = [self.config.color_palette[i % len(self.config.color_palette)] for i in range(len(self.data_list))]
+        colors = [
+            self.config.color_palette[i % len(self.config.color_palette)]
+            for i in range(len(self.data_list))
+        ]
         bars = ax1.bar(names, success_rates, color=colors, alpha=0.8)
 
         ax1.set_ylim(0, 105)
@@ -409,7 +412,7 @@ class ExperimentChartGenerator:
         ax1.legend()
 
         # Add value labels on bars
-        for bar, rate in zip(bars, success_rates):
+        for bar, rate in zip(bars, success_rates, strict=False):
             ax1.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + 1,
@@ -435,7 +438,7 @@ class ExperimentChartGenerator:
         ax2.set_title("P99 Latency Comparison", fontsize=self.config.title_font_size)
 
         # Add value labels on bars
-        for bar, val in zip(bars, p99_values):
+        for bar, val in zip(bars, p99_values, strict=False):
             ax2.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + max(p99_values) * 0.02,
@@ -498,7 +501,9 @@ class ExperimentChartGenerator:
                     ax.set_yticklabels(["P10", "P25", "P50", "P75", "P90", "P95", "P99"])
                     ax.set_xlabel("Time Bucket", fontsize=self.config.font_size)
                     ax.set_ylabel("Percentile", fontsize=self.config.font_size)
-                    ax.set_title("Latency Distribution Over Time", fontsize=self.config.title_font_size)
+                    ax.set_title(
+                        "Latency Distribution Over Time", fontsize=self.config.title_font_size
+                    )
 
                     cbar = fig.colorbar(im, ax=ax)
                     cbar.set_label("Latency (ms)")
@@ -587,9 +592,9 @@ class ExperimentChartGenerator:
             img_base64 = base64.b64encode(buf.read()).decode("utf-8")
             chart_html.append(
                 f'<div class="chart">'
-                f'<h3>{name.replace("_", " ").title()}</h3>'
+                f"<h3>{name.replace('_', ' ').title()}</h3>"
                 f'<img src="data:image/png;base64,{img_base64}" />'
-                f'</div>'
+                f"</div>"
             )
 
         # Generate summary statistics
@@ -696,16 +701,16 @@ class ExperimentChartGenerator:
         <body>
             <div class="container">
                 <h1>🚀 TerraFix Load Test Report</h1>
-                <p class="timestamp">Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p class="timestamp">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
 
                 <h2>📊 Summary Statistics</h2>
                 <div class="stats-container">
-                    {''.join(stats_html)}
+                    {"".join(stats_html)}
                 </div>
 
                 <h2>📈 Charts</h2>
                 <div class="charts-container">
-                    {''.join(chart_html)}
+                    {"".join(chart_html)}
                 </div>
             </div>
         </body>
@@ -800,4 +805,3 @@ def generate_report_from_files(
         generator.generate_html_report(output_path / "report.html")
 
     generator.close()
-

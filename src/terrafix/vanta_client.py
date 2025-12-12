@@ -326,9 +326,19 @@ class VantaClient:
                 response.raise_for_status()
 
             except requests.HTTPError as e:
-                # Always derive status/body from the HTTP response when available.
-                status_code = e.response.status_code if e.response is not None else response_status
-                body = e.response.text if e.response is not None else response_body
+                # Prioritize response_status which we captured before raise_for_status()
+                # as it's guaranteed to be set. Fall back to e.response only if needed.
+                # This ensures status_code is correctly set even when e.response
+                # might be None or behave unexpectedly with mock libraries.
+                if response_status is not None:
+                    status_code = response_status
+                    body = response_body
+                elif e.response is not None:
+                    status_code = e.response.status_code
+                    body = e.response.text
+                else:
+                    status_code = None
+                    body = None
 
                 # Handle 401 by attempting re-authentication
                 if status_code == 401 and self._client_id and self._client_secret:

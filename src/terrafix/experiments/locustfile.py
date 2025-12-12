@@ -52,9 +52,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
-from locust import HttpUser, between, constant_pacing, events, task  # type: ignore[import-untyped]
-from locust.runners import MasterRunner, WorkerRunner  # type: ignore[import-untyped]
-
+from locust import HttpUser, between, constant_pacing, events, task
+from locust.runners import MasterRunner, WorkerRunner
 
 # =============================================================================
 # Synthetic Failure Generation
@@ -260,7 +259,7 @@ class TerraFixBaseUser(HttpUser):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize base user."""
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)  # type: ignore[no-untyped-call]
         self.repo_size = os.environ.get("TERRAFIX_REPO_SIZE", "medium")
 
     def submit_failure(
@@ -345,7 +344,7 @@ class ThroughputUser(TerraFixBaseUser):
         - Task: Submit single failures continuously
     """
 
-    wait_time = constant_pacing(1)  # 1 request per second per user
+    wait_time = constant_pacing(1)  # type: ignore[no-untyped-call]  # 1 request per second per user
 
     @task(weight=10)
     def submit_single_failure(self) -> None:
@@ -370,7 +369,7 @@ class BurstUser(TerraFixBaseUser):
         - Higher weight for batch submissions
     """
 
-    wait_time = between(0.1, 0.5)  # Rapid-fire requests
+    wait_time = between(0.1, 0.5)  # type: ignore[no-untyped-call]  # Rapid-fire requests
 
     @task(weight=3)
     def submit_single_failure(self) -> None:
@@ -396,7 +395,7 @@ class ResilienceUser(TerraFixBaseUser):
         - Mix of unique and duplicate failures
     """
 
-    wait_time = between(0.5, 2.0)
+    wait_time = between(0.5, 2.0)  # type: ignore[no-untyped-call]
 
     # Track submitted failures for deduplication testing
     _submitted_failures: ClassVar[list[dict[str, Any]]] = []
@@ -440,7 +439,7 @@ class ScalabilityUser(TerraFixBaseUser):
         - Cycles through different repo sizes
     """
 
-    wait_time = between(1.0, 3.0)
+    wait_time = between(1.0, 3.0)  # type: ignore[no-untyped-call]
 
     REPO_SIZES: ClassVar[list[str]] = ["small", "medium", "large"]
 
@@ -515,7 +514,7 @@ class MixedWorkloadUser(TerraFixBaseUser):
         - Mixed task weights
     """
 
-    wait_time = between(0.5, 5.0)
+    wait_time = between(0.5, 5.0)  # type: ignore[no-untyped-call]
 
     @task(weight=60)
     def steady_state_request(self) -> None:
@@ -549,7 +548,7 @@ class MixedWorkloadUser(TerraFixBaseUser):
 # =============================================================================
 
 
-@events.test_start.add_listener
+@events.test_start.add_listener  # type: ignore
 def on_test_start(environment: Any, **kwargs: Any) -> None:
     """
     Reset counters at test start.
@@ -570,7 +569,7 @@ def on_test_start(environment: Any, **kwargs: Any) -> None:
     print("=" * 60)
 
 
-@events.test_stop.add_listener
+@events.test_stop.add_listener  # type: ignore
 def on_test_stop(environment: Any, **kwargs: Any) -> None:
     """
     Print summary statistics at test end.
@@ -595,7 +594,7 @@ def on_test_stop(environment: Any, **kwargs: Any) -> None:
     print("=" * 60)
 
 
-@events.request.add_listener
+@events.request.add_listener  # type: ignore
 def on_request(
     request_type: str,
     name: str,
@@ -627,7 +626,7 @@ def on_request(
 # =============================================================================
 
 
-@events.init.add_listener
+@events.init.add_listener  # type: ignore
 def on_locust_init(environment: Any, **kwargs: Any) -> None:
     """
     Initialize distributed testing support.
@@ -641,7 +640,7 @@ def on_locust_init(environment: Any, **kwargs: Any) -> None:
     if isinstance(environment.runner, MasterRunner):
         print("Running as MASTER node")
     elif isinstance(environment.runner, WorkerRunner):
-        print(f"Running as WORKER node")
+        print("Running as WORKER node")
 
 
 # =============================================================================
@@ -655,36 +654,47 @@ if _experiment == "throughput":
     # Default to throughput testing
     class User(ThroughputUser):
         """Default user class for throughput testing."""
+
         pass
 
 elif _experiment == "burst":
+
     class User(BurstUser):  # type: ignore[no-redef]
         """Default user class for burst testing."""
+
         pass
 
 elif _experiment == "resilience":
+
     class User(ResilienceUser):  # type: ignore[no-redef]
         """Default user class for resilience testing."""
+
         pass
 
 elif _experiment == "scalability":
+
     class User(ScalabilityUser):  # type: ignore[no-redef]
         """Default user class for scalability testing."""
+
         pass
 
 elif _experiment == "cascade":
+
     class User(CascadeUser):  # type: ignore[no-redef]
         """Default user class for cascade testing."""
+
         pass
 
 elif _experiment == "mixed":
+
     class User(MixedWorkloadUser):  # type: ignore[no-redef]
         """Default user class for mixed workload testing."""
+
         pass
 
 else:
     # Fallback to throughput
     class User(ThroughputUser):  # type: ignore[no-redef]
         """Default user class (throughput)."""
-        pass
 
+        pass

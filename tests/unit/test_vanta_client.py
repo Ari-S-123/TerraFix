@@ -341,7 +341,21 @@ class TestVantaClientGetFailingTests:
     @responses.activate
     def test_get_failing_tests_401_triggers_reauth(self) -> None:
         """Test that 401 triggers re-authentication with OAuth."""
-        # First call returns 401
+        # IMPORTANT: responses library matches in order they were added.
+        # Must add initial OAuth response FIRST for client initialization.
+
+        # 1. Initial OAuth authentication (for VantaClient init)
+        _ = responses.add(
+            responses.POST,
+            "https://api.vanta.com/oauth/token",
+            json={
+                "access_token": "initial_oauth_token",
+                "token_type": "bearer",
+            },
+            status=200,
+        )
+
+        # 2. First GET call returns 401 (triggers re-auth)
         _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
@@ -349,7 +363,7 @@ class TestVantaClientGetFailingTests:
             status=401,
         )
 
-        # OAuth re-authentication
+        # 3. OAuth re-authentication after 401
         _ = responses.add(
             responses.POST,
             "https://api.vanta.com/oauth/token",
@@ -360,22 +374,11 @@ class TestVantaClientGetFailingTests:
             status=200,
         )
 
-        # Retry after re-auth succeeds
+        # 4. Retry GET after re-auth succeeds
         _ = responses.add(
             responses.GET,
             "https://api.vanta.com/v1/tests",
             json={"results": {"data": [], "pageInfo": {"hasNextPage": False}}},
-            status=200,
-        )
-
-        # Initialize with OAuth first
-        _ = responses.add(
-            responses.POST,
-            "https://api.vanta.com/oauth/token",
-            json={
-                "access_token": "initial_oauth_token",
-                "token_type": "bearer",
-            },
             status=200,
         )
 

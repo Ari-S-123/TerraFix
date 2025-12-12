@@ -303,23 +303,30 @@ def run_locust_experiment(
     # Build locust command
     cmd = [
         "locust",
-        "-f", str(locustfile),
-        "--host", host,
+        "-f",
+        str(locustfile),
+        "--host",
+        host,
         "--headless",
-        "--users", str(config.users),
-        "--spawn-rate", str(config.spawn_rate),
-        "--run-time", config.run_time,
-        "--csv", str(csv_prefix),
+        "--users",
+        str(config.users),
+        "--spawn-rate",
+        str(config.spawn_rate),
+        "--run-time",
+        config.run_time,
+        "--csv",
+        str(csv_prefix),
         "--csv-full-history",
-        "--html", str(output_dir / f"{config.name}_report.html"),
+        "--html",
+        str(output_dir / f"{config.name}_report.html"),
     ]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Experiment: {config.name}")
     print(f"Description: {config.description}")
     print(f"Users: {config.users}, Spawn Rate: {config.spawn_rate}/s")
     print(f"Duration: {config.run_time}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if dry_run:
         print(f"[DRY RUN] Would execute: {' '.join(cmd)}")
@@ -368,6 +375,7 @@ def run_locust_experiment(
             results["stats_file"] = str(stats_file)
             # Parse summary from CSV
             import csv
+
             with stats_file.open() as f:
                 reader = csv.DictReader(f)
                 for row in reader:
@@ -424,11 +432,11 @@ def run_experiment_suite(
     configs = EXPERIMENTS[experiment_type]
     results = []
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print(f"# Running {experiment_type.upper()} experiments")
     print(f"# Target: {host}")
     print(f"# Output: {output_dir}")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Create output directory
     suite_output = output_dir / experiment_type
@@ -509,7 +517,7 @@ def generate_summary_report(
     </head>
     <body>
         <h1>🧪 TerraFix Experiment Summary</h1>
-        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
     """
 
     for suite_name, results in all_results.items():
@@ -519,8 +527,8 @@ def generate_summary_report(
             status_class = "success" if result.get("status") == "completed" else "failed"
             html_content += f"""
             <div class="experiment-card {status_class}">
-                <h3>{result.get('name', 'Unknown')}</h3>
-                <p>Status: <strong>{result.get('status', 'unknown')}</strong></p>
+                <h3>{result.get("name", "Unknown")}</h3>
+                <p>Status: <strong>{result.get("status", "unknown")}</strong></p>
             """
 
             if "summary" in result:
@@ -533,27 +541,27 @@ def generate_summary_report(
                     </tr>
                     <tr>
                         <td>Total Requests</td>
-                        <td class="metric">{summary.get('total_requests', 0):,}</td>
+                        <td class="metric">{summary.get("total_requests", 0):,}</td>
                     </tr>
                     <tr>
                         <td>Failures</td>
-                        <td class="metric">{summary.get('failure_count', 0):,}</td>
+                        <td class="metric">{summary.get("failure_count", 0):,}</td>
                     </tr>
                     <tr>
                         <td>Requests/sec</td>
-                        <td class="metric">{summary.get('requests_per_sec', 0):.1f}</td>
+                        <td class="metric">{summary.get("requests_per_sec", 0):.1f}</td>
                     </tr>
                     <tr>
                         <td>Median Response (ms)</td>
-                        <td class="metric">{summary.get('median_response_ms', 0):.0f}</td>
+                        <td class="metric">{summary.get("median_response_ms", 0):.0f}</td>
                     </tr>
                     <tr>
                         <td>P95 Response (ms)</td>
-                        <td class="metric">{summary.get('p95_response_ms', 0):.0f}</td>
+                        <td class="metric">{summary.get("p95_response_ms", 0):.0f}</td>
                     </tr>
                     <tr>
                         <td>P99 Response (ms)</td>
-                        <td class="metric">{summary.get('p99_response_ms', 0):.0f}</td>
+                        <td class="metric">{summary.get("p99_response_ms", 0):.0f}</td>
                     </tr>
                 </table>
                 """
@@ -589,7 +597,8 @@ def generate_summary_report(
                     data = ExperimentData(
                         experiment_type=suite_name,
                         profile=result.get("name", "unknown"),
-                        success_count=summary.get("total_requests", 0) - summary.get("failure_count", 0),
+                        success_count=summary.get("total_requests", 0)
+                        - summary.get("failure_count", 0),
                         failure_count=summary.get("failure_count", 0),
                         latencies_ms=[
                             summary.get("median_response_ms", 0),
@@ -752,4 +761,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

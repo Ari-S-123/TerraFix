@@ -107,9 +107,7 @@ class MockProcessingStats:
         with self._lock:
             uptime = time.time() - self.start_time
             avg_latency = (
-                self.total_latency_ms / self.total_requests
-                if self.total_requests > 0
-                else 0.0
+                self.total_latency_ms / self.total_requests if self.total_requests > 0 else 0.0
             )
             rps = self.total_requests / uptime if uptime > 0 else 0.0
 
@@ -119,7 +117,9 @@ class MockProcessingStats:
                 sorted_latencies = sorted(self.latencies)
                 p50 = sorted_latencies[int(len(sorted_latencies) * 0.50)]
                 p95 = sorted_latencies[int(len(sorted_latencies) * 0.95)]
-                p99 = sorted_latencies[min(int(len(sorted_latencies) * 0.99), len(sorted_latencies) - 1)]
+                p99 = sorted_latencies[
+                    min(int(len(sorted_latencies) * 0.99), len(sorted_latencies) - 1)
+                ]
 
             return {
                 "total_requests": self.total_requests,
@@ -195,6 +195,7 @@ class MockProcessor:
         self.latency_ms = latency_ms
         self.failure_rate = failure_rate
         import random
+
         self._random = random.Random()
 
     def process_failure(self, failure_data: dict[str, object]) -> dict[str, object]:
@@ -356,22 +357,27 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         result = self._process_real(failure_data)
                     results.append(result)
                 except Exception as e:
-                    results.append({
-                        "success": False,
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "success": False,
+                            "error": str(e),
+                        }
+                    )
 
             # Record stats
             latency_ms = (time.perf_counter() - start_time) * 1000
             successful = sum(1 for r in results if r.get("success", False))
             _stats.record_request(latency_ms, successful == len(results))
 
-            self._send_json(200, {
-                "total": len(results),
-                "successful": successful,
-                "failed": len(results) - successful,
-                "results": results,
-            })
+            self._send_json(
+                200,
+                {
+                    "total": len(results),
+                    "successful": successful,
+                    "failed": len(results) - successful,
+                    "results": results,
+                },
+            )
 
         except json.JSONDecodeError as e:
             self._send_json(400, {"error": f"Invalid JSON: {e}"})
@@ -404,11 +410,14 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                     failure_rate=_mock_failure_rate,
                 )
 
-            self._send_json(200, {
-                "message": "Configuration updated",
-                "latency_ms": _mock_latency_ms,
-                "failure_rate": _mock_failure_rate,
-            })
+            self._send_json(
+                200,
+                {
+                    "message": "Configuration updated",
+                    "latency_ms": _mock_latency_ms,
+                    "failure_rate": _mock_failure_rate,
+                },
+            )
 
         except Exception as e:
             self._send_json(400, {"error": str(e)})
@@ -431,13 +440,19 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
         # Convert dict to Failure object
         current_state_raw = failure_data.get("current_state", {})
-        current_state: dict[str, object] = current_state_raw if isinstance(current_state_raw, dict) else {}
+        current_state: dict[str, object] = (
+            current_state_raw if isinstance(current_state_raw, dict) else {}
+        )
 
         required_state_raw = failure_data.get("required_state", {})
-        required_state: dict[str, object] = required_state_raw if isinstance(required_state_raw, dict) else {}
+        required_state: dict[str, object] = (
+            required_state_raw if isinstance(required_state_raw, dict) else {}
+        )
 
         resource_details_raw = failure_data.get("resource_details")
-        resource_details: dict[str, object] = resource_details_raw if isinstance(resource_details_raw, dict) else {}
+        resource_details: dict[str, object] = (
+            resource_details_raw if isinstance(resource_details_raw, dict) else {}
+        )
 
         failure = Failure(
             test_id=str(failure_data.get("test_id", "")),
@@ -665,6 +680,7 @@ def main() -> int:
     """
     # Configure logging
     from terrafix.logging_config import setup_logging
+
     setup_logging("INFO")
 
     # Read configuration from environment
@@ -706,4 +722,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

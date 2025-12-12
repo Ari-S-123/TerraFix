@@ -309,18 +309,6 @@ class TestProcessFailureOnce:
         mock_git = MagicMock()
         mock_git_class.return_value = mock_git
 
-        # Mock analyzer
-        mock_analyzer = MagicMock()
-        mock_analyzer.find_resource_by_arn.return_value = (  # pyright: ignore[reportAny]
-            "/tmp/repo/s3.tf",
-            {"bucket": "test"},
-            "test_bucket",
-        )
-        mock_analyzer.get_module_context.return_value = {}  # pyright: ignore[reportAny]
-        mock_analyzer.get_file_content.return_value = 'resource "aws_s3_bucket" {}'  # pyright: ignore[reportAny]
-        mock_analyzer.terraform_files = ["s3.tf"]
-        mock_analyzer_class.return_value = mock_analyzer
-
         # Mock validator
         mock_validator = MagicMock()
         mock_validator.validate_configuration.return_value = MagicMock(  # pyright: ignore[reportAny]
@@ -344,6 +332,19 @@ class TestProcessFailureOnce:
             terraform_path = Path(temp_dir) / "repo" / "terraform"
             terraform_path.mkdir(parents=True)
             _ = (terraform_path / "s3.tf").write_text('resource "aws_s3_bucket" "test" {}')
+
+            # Mock analyzer - use path relative to our actual temp directory
+            # to avoid Unix/Windows path mismatches
+            mock_analyzer = MagicMock()
+            mock_analyzer.find_resource_by_arn.return_value = (  # pyright: ignore[reportAny]
+                str(terraform_path / "s3.tf"),  # Use actual temp path, not hardcoded Unix path
+                {"bucket": "test"},
+                "test_bucket",
+            )
+            mock_analyzer.get_module_context.return_value = {}  # pyright: ignore[reportAny]
+            mock_analyzer.get_file_content.return_value = 'resource "aws_s3_bucket" {}'  # pyright: ignore[reportAny]
+            mock_analyzer.terraform_files = ["s3.tf"]
+            mock_analyzer_class.return_value = mock_analyzer
 
             # Patch tempfile to use our temp dir
             with patch("tempfile.TemporaryDirectory") as mock_tempdir:
