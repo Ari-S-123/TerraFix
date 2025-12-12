@@ -1,0 +1,203 @@
+# =============================================================================
+# TerraFix Local Development and Load Testing Environment
+# =============================================================================
+#
+# This docker-compose file sets up a local testing environment for TerraFix
+# load testing experiments. It provides:
+#
+#   - LocalStack: Emulates AWS services (S3, IAM, etc. - note: Bedrock is NOT
+#     supported, so mock mode is required for load testing)
+#   - Redis: State store for failure deduplication (using standard Redis since
+#     LocalStack's ElastiCache support is limited)
+#   - TerraFix API Server: Runs in mock mode for load testing without real
+#     external services (Vanta, GitHub, Bedrock)
+#
+# Usage:
+#   # Start all services
+#   docker-compose -f docker-compose.localstack.yml up -d
+#
+#   # Run load tests
+#   python -m terrafix.experiments.run_experiments --local
+#
+#   # View logs
+#   docker-compose -f docker-compose.localstack.yml logs -f
+#
+#   # Stop and cleanup
+#   docker-compose -f docker-compose.localstack.yml down -v
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # LocalStack - AWS Service Emulation
+  # ---------------------------------------------------------------------------
+  # LocalStack emulates AWS services locally. Note that AWS Bedrock is NOT
+  # supported by LocalStack, so load testing must use mock mode.
+  #
+  # Supported services used by TerraFix infrastructure:
+  #   - S3 (for Terraform state if needed)
+  #   - IAM (for testing IAM policies)
+  #   - CloudWatch (for logs)
+  #   - Secrets Manager (for credential testing)
+  #
+  # Reference: https://docs.localstack.cloud/references/coverage/
+  # ---------------------------------------------------------------------------
+  localstack:
+    container_name: terrafix-localstack
+    image: localstack/localstack:3.0
+    ports:
+      - "4566:4566" # LocalStack Gateway (all services)
+      - "4510-4559:4510-4559" # External service ports
+    environment:
+      # Services to enable
+      - SERVICES=s3,iam,cloudwatch,logs,secretsmanager,sts
+      # Default AWS region
+      - DEFAULT_REGION=us-west-2
+      # Debug mode for verbose logging
+      - DEBUG=${LOCALSTACK_DEBUG:-0}
+      # Data persistence directory
+      - DATA_DIR=/var/lib/localstack/data
+      # Disable Lambda Docker mode (not needed for TerraFix load testing)
+      - LAMBDA_EXECUTOR=local
+      # Enable persistence across restarts
+      - PERSISTENCE=1
+    volumes:
+      # Persist LocalStack data
+      - localstack-data:/var/lib/localstack
+      # Docker socket for Lambda containers (if needed later)
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - terrafix-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Redis - State Store for Deduplication
+  # ---------------------------------------------------------------------------
+  # Using standard Redis instead of LocalStack ElastiCache because:
+  #   1. LocalStack's ElastiCache support is limited (Pro feature)
+  #   2. Standard Redis is simpler and more reliable for testing
+  #   3. The TerraFix RedisStateStore works identically with standard Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    container_name: terrafix-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - terrafix-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # TerraFix API Server - Mock Mode for Load Testing
+  # ---------------------------------------------------------------------------
+  # Runs the TerraFix API server in mock mode, which simulates the entire
+  # remediation pipeline without requiring real external services:
+  #   - No Vanta API needed
+  #   - No GitHub API needed
+  #   - No AWS Bedrock needed
+  #
+  # This enables fast, reproducible load testing locally.
+  # ---------------------------------------------------------------------------
+  terrafix-api:
+    container_name: terrafix-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      # Enable mock mode (no real external services)
+      - TERRAFIX_MOCK_MODE=true
+      # API server port
+      - TERRAFIX_API_PORT=8081
+      # Simulated processing latency (ms)
+      - TERRAFIX_MOCK_LATENCY_MS=${MOCK_LATENCY_MS:-50}
+      # Simulated failure rate (0.0 to 1.0)
+      - TERRAFIX_MOCK_FAILURE_RATE=${MOCK_FAILURE_RATE:-0.0}
+      # Redis connection URL
+      - REDIS_URL=redis://redis:6379/0
+      # Logging configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Dummy credentials (required by config validation but not used in mock mode)
+      - VANTA_API_TOKEN=mock-token-for-load-testing
+      - GITHUB_TOKEN=mock-token-for-load-testing
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    command: ["python", "-m", "terrafix.api_server"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - terrafix-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Locust - Load Testing (Optional Container)
+  # ---------------------------------------------------------------------------
+  # Optional Locust container for running load tests from within Docker.
+  # Alternatively, run Locust directly on the host machine.
+  #
+  # To use this container:
+  #   docker-compose -f docker-compose.localstack.yml --profile loadtest up -d
+  #
+  # Then access the Locust web UI at http://localhost:8089
+  # ---------------------------------------------------------------------------
+  locust:
+    container_name: terrafix-locust
+    image: locustio/locust:2.20.1
+    profiles:
+      - loadtest
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./src/terrafix/experiments:/mnt/locust:ro
+    environment:
+      # Target host (the TerraFix API server)
+      - LOCUST_HOST=http://terrafix-api:8081
+      # Locust file location
+      - LOCUST_LOCUSTFILE=/mnt/locust/locustfile.py
+      # Default experiment type
+      - TERRAFIX_EXPERIMENT=${TERRAFIX_EXPERIMENT:-throughput}
+    command: -f /mnt/locust/locustfile.py --host=http://terrafix-api:8081
+    depends_on:
+      terrafix-api:
+        condition: service_healthy
+    networks:
+      - terrafix-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  terrafix-network:
+    driver: bridge
+    name: terrafix-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # LocalStack data persistence
+  localstack-data:
+    name: terrafix-localstack-data
+  # Redis data persistence
+  redis-data:
+    name: terrafix-redis-data

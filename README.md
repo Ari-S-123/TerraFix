@@ -291,6 +291,42 @@ generate_report_from_files(['results_stats.csv'], 'charts/', html=True)
 
 Available charts: latency distribution, percentile plots, throughput timeline, success/failure rates, comparison charts, and HTML reports.
 
+### LocalStack-Based Testing (Recommended for Local Development)
+
+For cost-free local testing without AWS charges, use the Docker Compose setup with LocalStack and mock mode:
+
+```bash
+# Quick start - run all experiments locally
+./scripts/run_load_tests.sh all  # Linux/macOS
+.\scripts\run_load_tests.ps1 all  # Windows PowerShell
+
+# Or step-by-step:
+# 1. Start the local environment (Redis + TerraFix API in mock mode)
+docker-compose -f docker-compose.localstack.yml up -d
+
+# 2. Verify services are running
+curl http://localhost:8081/health
+
+# 3. Run load tests
+python -m terrafix.experiments.run_experiments --local
+
+# 4. View results
+# Open experiment_results/experiment_summary.html
+
+# 5. Stop environment
+docker-compose -f docker-compose.localstack.yml down
+```
+
+**Key Features:**
+- **Zero Cost**: No AWS charges (uses mocked services)
+- **Fast Iteration**: Lower latency, quicker feedback cycles
+- **Reproducible**: Consistent local environment
+- **Offline**: No internet connection required
+
+**Note**: AWS Bedrock is not emulated by LocalStack, so load tests use TerraFix's built-in mock mode which simulates the entire remediation pipeline.
+
+For detailed instructions, see [LOAD_TESTING_GUIDE.md](./LOAD_TESTING_GUIDE.md).
+
 ## CI/CD
 
 TerraFix uses GitHub Actions for continuous integration:
